@@ -1,7 +1,5 @@
 """Routes that say whether the server is up and where things are. None of them needs a key."""
 
-import os
-from pathlib import Path
 from typing import Literal
 
 from fastapi import APIRouter, Response
@@ -9,6 +7,7 @@ from fastapi import APIRouter, Response
 from alexia_api import __version__
 from alexia_api.api.deps import Services, ServicesDep
 from alexia_api.api.schemas import Health, Index, Readiness
+from alexia_api.services.health import state_dir_writable
 from alexia_api.services.keys import ApiKeyStore, KeyStoreError
 
 router = APIRouter(tags=["meta"])
@@ -23,18 +22,11 @@ def _keys_check(keys: ApiKeyStore) -> Check:
         return "failed"
 
 
-def _state_dir_check(path: Path) -> Check:
-    probe = path
-    while not probe.exists() and probe != probe.parent:
-        probe = probe.parent
-    return "ok" if probe.is_dir() and os.access(probe, os.W_OK | os.X_OK) else "failed"
-
-
 def readiness_checks(services: Services) -> dict[str, Check]:
     return {
         "accounts": "ok" if services.registry.accounts else "failed",
         "keys": _keys_check(services.keys),
-        "state_dir": _state_dir_check(services.settings.state_dir),
+        "state_dir": "ok" if state_dir_writable(services.settings.state_dir) else "failed",
     }
 
 
