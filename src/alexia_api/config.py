@@ -48,6 +48,10 @@ _PLATFORM_VARIABLES: Final = re.compile(
     r"service_(host|port)(_.+)?|port(_\d+_(tcp|udp)(_.+)?)?|name|env_.+"
 )
 
+LogLevel = Literal["debug", "info", "warning", "error"]
+LogFormat = Literal["text", "json"]
+type AccountSecrets = tuple[SecretStr, SecretStr]
+
 
 class ConfigError(Exception):
     """The configuration is wrong. The message names the setting and never shows a value."""
@@ -273,10 +277,10 @@ class Settings(BaseSettings):
         default_factory=list,
         description="Answer only requests for these host names. Empty means any. Comma separated.",
     )
-    log_level: Literal["debug", "info", "warning", "error"] = Field(
+    log_level: LogLevel = Field(
         default="info", description="How much the server writes to its log."
     )
-    log_format: Literal["text", "json"] = Field(
+    log_format: LogFormat = Field(
         default="text", description="Plain lines for people, or one JSON object per line."
     )
     cache: CacheTtls = Field(default_factory=CacheTtls, description="How long answers are reused.")
@@ -340,6 +344,27 @@ class Settings(BaseSettings):
         return ZoneInfo(self.timezone)
 
 
+class FixedSettings(Settings):
+    """Settings that are exactly the values given, with no file and no variable read.
+
+    The demo uses these, so a person's own `ALEXIA_API_` variables can never put a real account
+    into a simulated school. The OpenAPI command uses them so the document does not depend on
+    where it is made.
+    """
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
+        del settings_cls, env_settings, dotenv_settings, file_secret_settings
+        return (init_settings,)
+
+
 def _explain(error: ValidationError) -> str:
     lines = []
     for item in error.errors(include_url=False, include_context=False, include_input=False):
@@ -372,6 +397,23 @@ def _suggest(name: str) -> str:
     return f", did you mean {ENV_PREFIX}{close[0].upper()}?" if close else ""
 
 
+def _anchor_state_dir(settings: Settings, config_file: Path | None) -> Settings:
+    """Make a relative state directory mean the same thing wherever the server is started.
+
+    A relative path means a place next to the configuration file, so `--config` works from any
+    directory and the key commands and the server agree on where the keys are. A path from an
+    environment variable stays relative to the working directory, as a person typing it expects.
+    """
+    try:
+        state_dir = settings.state_dir.expanduser()
+    except RuntimeError:
+        raise ConfigError("state_dir starts with ~ but the home directory is not known") from None
+    from_variable = any(name.upper() == f"{ENV_PREFIX}STATE_DIR" for name in os.environ)
+    if not state_dir.is_absolute() and config_file is not None and not from_variable:
+        state_dir = config_file.resolve().parent / state_dir
+    return settings.model_copy(update={"state_dir": state_dir})
+
+
 def load_settings(config_file: Path | None = None) -> Settings:
     """Read the settings from a TOML file, if given, and from the environment."""
     if config_file is not None and not config_file.is_file():
@@ -387,7 +429,7 @@ def load_settings(config_file: Path | None = None) -> Settings:
         model_config = SettingsConfigDict(toml_file=config_file)
 
     try:
-        return FromFile()
+        return _anchor_state_dir(FromFile(), config_file)
     except ValidationError as error:
         raise ConfigError(_explain(error)) from None
     except tomllib.TOMLDecodeError as error:
@@ -443,3 +485,40 @@ def read_secret(reference: SecretStr, *, setting: str, environ: Mapping[str, str
     if not value:
         raise ConfigError(f"{setting} is empty")
     return SecretStr(value)
+
+
+def read_account_secrets(
+    name: str, account: AccountSettings, environ: Mapping[str, str]
+) -> AccountSecrets:
+    """The user name and the password of one account.
+
+    One error names every part that cannot be read, so a person fixes both in one go.
+    """
+    problems = []
+    parts = []
+    for part, reference in (("username", account.username), ("password", account.password)):
+        try:
+            parts.append(read_secret(reference, setting=f"accounts.{name}.{part}", environ=environ))
+        except ConfigError as error:
+            problems.append(str(error))
+    if problems:
+        raise ConfigError("\n".join(problems))
+    return parts[0], parts[1]
+
+
+def resolve_secrets(settings: Settings, environ: Mapping[str, str]) -> dict[str, AccountSecrets]:
+    """Read the secrets of every account before any of them is used.
+
+    A missing variable stops the server before it holds a connection. One error lists every
+    secret that cannot be read, so a person fixes them all in one go.
+    """
+    secrets: dict[str, AccountSecrets] = {}
+    problems = []
+    for name, account in settings.accounts.items():
+        try:
+            secrets[name] = read_account_secrets(name, account, environ)
+        except ConfigError as error:
+            problems.extend(str(error).splitlines())
+    if problems:
+        raise ConfigError("some secrets cannot be read\n  " + "\n  ".join(problems))
+    return secrets

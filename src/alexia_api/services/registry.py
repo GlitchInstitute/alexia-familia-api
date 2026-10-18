@@ -12,7 +12,7 @@ from urllib.parse import urlsplit
 import httpx
 
 from alexia_api.clock import Clock, LocalClock, SystemClock
-from alexia_api.config import AccountSettings, CacheTtls, Settings, read_secret
+from alexia_api.config import AccountSettings, CacheTtls, Settings, resolve_secrets
 from alexia_api.domain.accounts import Account, Capabilities
 from alexia_api.domain.children import Child, Guardian, StaffMember, TrackingCounters, apply_pins
 from alexia_api.domain.ids import (
@@ -149,13 +149,7 @@ class Registry:
         before it holds a connection. Nothing here calls the portal. The first request does.
         """
         clock = LocalClock(clock or SystemClock(), settings.tzinfo)
-        secrets = {
-            name: (
-                read_secret(account.username, setting=f"accounts.{name}.username", environ=environ),
-                read_secret(account.password, setting=f"accounts.{name}.password", environ=environ),
-            )
-            for name, account in settings.accounts.items()
-        }
+        secrets = resolve_secrets(settings, environ)
         gates = Gates(
             writes=settings.allow_writes,
             restore_unread=settings.restore_unread,

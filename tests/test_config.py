@@ -6,11 +6,15 @@ import pytest
 from pydantic import SecretStr
 
 from alexia_api.config import (
+    AccountSettings,
     ConfigError,
+    FixedSettings,
     Settings,
     find_config_file,
     load_settings,
+    read_account_secrets,
     read_secret,
+    resolve_secrets,
     unknown_variables,
 )
 from alexia_api.domain.accounts import Capabilities
@@ -417,3 +421,154 @@ def test_variables_without_the_prefix_are_not_looked_at(name: str) -> None:
 
 def test_a_misspelled_variable_is_caught_whatever_its_case() -> None:
     assert unknown_variables({"alexia_api_docs_enabledd": "x"}) == ["alexia_api_docs_enabledd"]
+
+
+def _two_accounts(**second: str) -> Settings:
+    return FixedSettings(
+        accounts={
+            "marta": AccountSettings(
+                portal_url="https://portal.example.test",
+                institution_key="demo-school",
+                username=SecretStr("env:MARTA_USER"),
+                password=SecretStr("env:MARTA_PASSWORD"),
+            ),
+            "pablo": AccountSettings(
+                portal_url="https://portal.example.test",
+                institution_key="demo-school",
+                username=SecretStr(second.get("username", "pablo.prueba")),
+                password=SecretStr(second.get("password", "env:PABLO_PASSWORD")),
+            ),
+        }
+    )
+
+
+def test_resolve_secrets_reads_every_account() -> None:
+    environ = {"MARTA_USER": "marta.ejemplo", "MARTA_PASSWORD": "pw-a", "PABLO_PASSWORD": "pw-b"}
+
+    secrets = resolve_secrets(_two_accounts(), environ)
+
+    assert {
+        name: (user.get_secret_value(), password.get_secret_value())
+        for name, (user, password) in secrets.items()
+    } == {
+        "marta": ("marta.ejemplo", "pw-a"),
+        "pablo": ("pablo.prueba", "pw-b"),
+    }
+
+
+def test_resolve_secrets_reports_every_secret_that_cannot_be_read_at_once() -> None:
+    environ = {"MARTA_PASSWORD": "never-shown-a"}
+
+    with pytest.raises(ConfigError) as raised:
+        resolve_secrets(_two_accounts(), environ)
+
+    message = str(raised.value)
+    assert "accounts.marta.username" in message
+    assert "MARTA_USER" in message
+    assert "accounts.pablo.password" in message
+    assert "PABLO_PASSWORD" in message
+    assert "accounts.marta.password" not in message
+    assert "never-shown-a" not in message
+
+
+def test_one_account_reports_both_of_its_unreadable_parts() -> None:
+    account = AccountSettings(
+        portal_url="https://portal.example.test",
+        institution_key="demo-school",
+        username=SecretStr("env:NO_USER"),
+        password=SecretStr("env:NO_PASSWORD"),
+    )
+
+    with pytest.raises(ConfigError) as raised:
+        read_account_secrets("marta", account, {})
+
+    assert str(raised.value).splitlines() == [
+        "accounts.marta.username refers to the environment variable NO_USER, which is not set",
+        "accounts.marta.password refers to the environment variable NO_PASSWORD, which is not set",
+    ]
+
+
+def test_fixed_settings_ignore_the_environment_and_any_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("ALEXIA_API_DOCS_ENABLED", "false")
+    monkeypatch.setenv("ALEXIA_API_ALLOW_WRITES", "true")
+    monkeypatch.setenv("ALEXIA_API_ACCOUNTS__REAL__PORTAL_URL", "https://real.example.test")
+    monkeypatch.setenv("ALEXIA_API_NOT_A_SETTING", "1")
+    monkeypatch.chdir(write(tmp_path, "docs_enabled = false\n" + ONE_ACCOUNT).parent)
+
+    settings = FixedSettings(log_level="debug")
+
+    assert settings.docs_enabled is True
+    assert settings.allow_writes is False
+    assert settings.accounts == {}
+    assert settings.log_level == "debug"
+
+
+def test_a_relative_state_directory_is_next_to_the_file_and_not_the_working_directory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    configuration = tmp_path / "server"
+    configuration.mkdir()
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    monkeypatch.chdir(elsewhere)
+
+    settings = load_settings(write(configuration, 'state_dir = "keep"\n' + ONE_ACCOUNT))
+
+    assert settings.state_dir == (configuration / "keep").resolve()
+
+
+def test_the_default_state_directory_is_next_to_the_file_too(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path.parent)
+
+    settings = load_settings(write(tmp_path, ONE_ACCOUNT))
+
+    assert settings.state_dir == (tmp_path / "state").resolve()
+
+
+def test_an_absolute_state_directory_is_left_alone(tmp_path: Path) -> None:
+    absolute = tmp_path / "somewhere"
+
+    settings = load_settings(
+        write(tmp_path, f'state_dir = "{absolute.as_posix()}"\n' + ONE_ACCOUNT)
+    )
+
+    assert settings.state_dir == absolute
+
+
+def test_a_state_directory_from_a_variable_is_relative_to_the_working_directory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("ALEXIA_API_STATE_DIR", "typed-in-a-shell")
+
+    settings = load_settings(write(tmp_path, ONE_ACCOUNT))
+
+    assert settings.state_dir == Path("typed-in-a-shell")
+
+
+def test_without_a_file_the_state_directory_is_relative_to_the_working_directory() -> None:
+    assert load_settings(None).state_dir == Path("state")
+
+
+def test_a_state_directory_can_start_with_the_home_directory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
+
+    settings = load_settings(write(tmp_path, 'state_dir = "~/keep"\n' + ONE_ACCOUNT))
+
+    assert settings.state_dir == tmp_path / "keep"
+
+
+def test_the_variable_for_the_state_directory_counts_whatever_its_case(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("alexia_api_state_dir", "typed-in-a-shell")
+
+    settings = load_settings(write(tmp_path, ONE_ACCOUNT))
+
+    assert settings.state_dir == Path("typed-in-a-shell")
