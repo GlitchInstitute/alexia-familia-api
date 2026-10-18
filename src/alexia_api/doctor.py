@@ -28,7 +28,6 @@ from alexia_api.config import (
     secret_source,
 )
 from alexia_api.domain.errors import (
-    BREAKER_CAUSE_TEXT,
     BreakerCause,
     PortalError,
     PortalMaintenance,
@@ -209,8 +208,7 @@ def _account(
             Finding(
                 "fail",
                 subject,
-                f"logins are paused since {blocked.since:%Y-%m-%d %H:%M %z} because "
-                f"{BREAKER_CAUSE_TEXT[blocked.cause]}",
+                f"logins are paused {blocked.when_and_why()}",
                 f"{HOW_TO_UNBLOCK[blocked.cause]}, then run `alexia-api accounts reset {name}`",
             )
         )

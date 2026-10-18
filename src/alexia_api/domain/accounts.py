@@ -5,7 +5,7 @@ from typing import Annotated, Literal
 from pydantic import AwareDatetime, Field
 
 from alexia_api.domain.base import Model
-from alexia_api.domain.errors import BreakerCause, Interstitial
+from alexia_api.domain.errors import BREAKER_CAUSE_TEXT, BreakerCause, Interstitial
 from alexia_api.domain.ids import AccountId
 
 
@@ -37,6 +37,10 @@ class Blocked(Model):
         default=None,
         description="The portal page that needs a person, when the cause is a required step.",
     )
+
+    def when_and_why(self) -> str:
+        """When the block began and why, worded to follow the words `logins are paused`."""
+        return f"since {self.since:%Y-%m-%d %H:%M %z} because {BREAKER_CAUSE_TEXT[self.cause]}"
 
 
 Connection = Annotated[LoggedOut | LoggedIn | Blocked, Field(discriminator="state")]
