@@ -7,8 +7,8 @@ from alexia_api.domain.errors import PortalError, SessionExpired, UnexpectedRepl
 from alexia_api.domain.ids import parse_person_id
 from alexia_api.portal.children import parse_home, read_home
 from alexia_api.sim.app import render_home
-from alexia_api.sim.world import default_world, synthetic_guid
-from tests.harness import Failure, Harness
+from alexia_api.sim.world import DEMO_USER_A, default_world, synthetic_guid
+from tests.harness import A_NEW_SIBLING, Failure, Harness
 
 
 def photo(person: int) -> str:
@@ -153,6 +153,19 @@ async def test_reads_the_home_page_through_a_signed_in_gateway(harness: Harness)
     snapshot = await harness.gateway().call(read_home)
 
     assert [child.slug for child in snapshot.children] == ["lucia", "mateo"]
+
+
+async def test_a_change_at_the_portal_shows_to_a_session_that_is_already_open(
+    harness: Harness,
+) -> None:
+    gateway = harness.gateway()
+    await gateway.call(read_home)
+
+    harness.enrol(DEMO_USER_A, A_NEW_SIBLING)
+    snapshot = await gateway.call(read_home)
+
+    assert [child.slug for child in snapshot.children] == ["lucia", "mateo", "ines"]
+    assert harness.sim.counters.login_attempts == 1
 
 
 async def test_an_expired_session_is_reported_when_reading_home(

@@ -1,7 +1,7 @@
 """A simulated portal plus everything needed to open sessions and gateways against it."""
 
 from collections.abc import Awaitable, Callable, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -24,9 +24,19 @@ from alexia_api.sim.world import (
     DEMO_USER_A,
     DEMO_USER_B,
     SIM_INSTITUTION_KEY,
+    SimChild,
+    synthetic_guid,
 )
 
 type Failure = Callable[[Awaitable[object]], Awaitable[PortalErrorDetail]]
+
+A_NEW_SIBLING = SimChild(
+    student_id=synthetic_guid(0x103),
+    person_id=synthetic_guid(0x203),
+    full_name="Inés Ejemplo Muestra",
+    first_name="Inés",
+    relation="Hija",
+)
 
 
 async def failure_of(awaitable: Awaitable[object]) -> PortalErrorDetail:
@@ -102,11 +112,15 @@ class Harness:
 
     def settings(self, **overrides: Any) -> Settings:
         """Settings for two accounts, `marta` and `pablo`, unless `accounts` says otherwise."""
-        accounts = overrides.pop("accounts", None) or {
-            "marta": self.account_settings(),
-            "pablo": self.account_settings(DEMO_USER_B, DEMO_PASSWORD_B),
-        }
-        return Settings(accounts=accounts, state_dir=self.state_dir, **overrides)
+        accounts = (
+            overrides.pop("accounts")
+            if "accounts" in overrides
+            else {
+                "marta": self.account_settings(),
+                "pablo": self.account_settings(DEMO_USER_B, DEMO_PASSWORD_B),
+            }
+        )
+        return Settings(accounts=accounts, **{"state_dir": self.state_dir, **overrides})
 
     def registry(
         self, settings: Settings | None = None, *, environ: Mapping[str, str] | None = None
@@ -122,3 +136,14 @@ class Harness:
 
     def requests_to(self, suffix: str) -> int:
         return sum(1 for request in self.sim.requests if request.path.endswith(suffix))
+
+    def enrol(self, username: str, child: SimChild) -> None:
+        """The school adds a child to a family. A session that is already open sees it next."""
+        world = self.sim.world
+        families = tuple(
+            replace(family, children=(*family.children, child))
+            if family.username == username
+            else family
+            for family in world.families
+        )
+        self.sim.world = replace(world, families=families)

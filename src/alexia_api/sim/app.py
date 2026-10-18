@@ -444,9 +444,16 @@ class PortalSim:
             )
         return _envelope({"IsOk": True})
 
+    def _family_of(self, session: SimSession) -> SimFamily | None:
+        """The family's data as it stands now, so a change shows to a session that is open."""
+        if session.family is None:
+            return None
+        return self.world.family_for(session.family.username)
+
     def _child_of(self, session: SimSession, student_id: object) -> SimChild:
-        if session.family is not None:
-            for child in session.family.children:
+        family = self._family_of(session)
+        if family is not None:
+            for child in family.children:
                 if child.student_id == student_id:
                     return child
         raise SimFaultError
@@ -472,11 +479,12 @@ class PortalSim:
 
     async def _home(self, request: Request) -> Response:
         session = self._live_session(request)
-        if session is None or session.family is None:
+        family = self._family_of(session) if session is not None else None
+        if family is None:
             return RedirectResponse(
                 f"{LOGON_PATH}?ReturnUrl={quote(HOME_PATH, safe='')}", status_code=302
             )
-        return HTMLResponse(render_home(session.family))
+        return HTMLResponse(render_home(family))
 
     async def _keep_alive(self, request: Request) -> Response:
         self._live_session(request)
