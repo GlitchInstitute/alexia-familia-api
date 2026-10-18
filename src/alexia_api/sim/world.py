@@ -78,6 +78,7 @@ def _received(
     expires: str | None = None,
     category: str = "",
     institutional: bool = False,
+    anonymous: bool = False,
 ) -> SimMessage:
     date, time = sent_at.split(" ")
     return SimMessage(
@@ -92,6 +93,7 @@ def _received(
         expires=expires,
         category=category,
         institutional=institutional,
+        anonymous=anonymous,
     )
 
 
@@ -127,10 +129,14 @@ def _mail_of_marta() -> tuple[SimMessage, ...]:
         _received(
             0x1005, "Dirección", "Calendario escolar", "2026-10-05 10:30", institutional=True
         ),
-        _received(0x1006, "Comedor", "Menú de octubre", "2026-09-30 11:00"),
+        _received(0x1006, "Comedor", "Menú de octubre", "2026-09-30 11:00", anonymous=True),
         _received(0x1007, ana, "Reunión de padres", "2026-09-20 16:20"),
         _received(
-            0x1008, "Secretaría", "Bienvenida al curso", "2026-09-12 09:00", institutional=True
+            0x1008,
+            "Dirección & Secretaría",
+            "Bienvenida al curso",
+            "2026-09-12 09:00",
+            institutional=True,
         ),
         _sent(0x2001, "Marta", "Ausencia de Lucía", "2026-10-01 20:15"),
         _sent(0x2002, "Marta", "Consulta sobre la excursión", "2026-09-15 18:00"),

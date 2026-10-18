@@ -79,6 +79,8 @@ class Tx(Protocol):
 
     def absolute(self, path: str) -> str: ...
 
+    def now(self) -> datetime: ...
+
 
 def decode_body(body: bytes, content_type: str | None) -> str:
     """Decode a body with the charset it declares, UTF-8 without a byte order mark by default."""
@@ -145,6 +147,9 @@ class PortalSession:
 
     def absolute(self, path: str) -> str:
         return str(self._root.join(path))
+
+    def now(self) -> datetime:
+        return self._clock.now()
 
     def clear_cookies(self) -> None:
         self._client.cookies.clear()

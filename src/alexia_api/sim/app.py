@@ -11,6 +11,7 @@ hide behind the same constant in the fake.
 """
 
 import json
+import math
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -32,8 +33,10 @@ from alexia_api.sim.mail import (
     FOLDER_OF_ID,
     SimFolder,
     SimMessage,
+    feed_cells,
     folder_selection,
     folder_tree,
+    html_safe_json,
     newest_first,
 )
 from alexia_api.sim.world import SimChild, SimFamily, SimWorld, default_world, synthetic_guid
@@ -41,6 +44,9 @@ from alexia_api.sim.world import SimChild, SimFamily, SimWorld, default_world, s
 BASE_URL: Final = "https://sim.invalid"
 LOGON_PATH: Final = "/ACWeb/LogOn.aspx"
 HOME_PATH: Final = "/ACWeb/paginas/Home/HomeMetro.aspx"
+MESSAGES_PATH: Final = "/ACWeb/paginas/Comunicacion/Comunicados.aspx"
+FEED_QUERY: Final = frozenset({"jqGridID", "_search", "nd", "rows", "page", "sidx", "sord"})
+_FEED_NUMBERS: Final = ("nd", "rows", "page")
 
 EXPIRED_LOGON_TEXT: Final = "La sesión ha caducado. Vuelva a iniciar sesión."
 BAD_CREDENTIALS_TEXT: Final = "Usuario o código de acceso incorrecto"
@@ -84,6 +90,7 @@ class SimOptions:
     session_ttl_seconds: float = 20 * 60
     lock_after_failures: int | None = None
     home_route: str | None = None
+    feed_cell_count: int | None = None
 
 
 @dataclass(slots=True)
@@ -102,6 +109,7 @@ class SimRequest:
     path: str
     status: int
     at: float
+    query: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -178,6 +186,10 @@ def _fault() -> JSONResponse:
     return JSONResponse(body, status_code=500)
 
 
+def _server_error() -> HTMLResponse:
+    return HTMLResponse("<html><body>Error</body></html>", 500)
+
+
 def _expired() -> JSONResponse:
     body = {"Message": "Error al procesar la solicitud.", "StackTrace": "", "ExceptionType": ""}
     return JSONResponse(body, status_code=401)
@@ -224,6 +236,7 @@ class _Tracker:
                     path=str(scope["path"]),
                     status=status,
                     at=started,
+                    query=bytes(scope["query_string"]).decode("latin-1"),
                 )
             )
 
@@ -280,6 +293,7 @@ class PortalSim:
             Route(LOGON_PATH, self._logon, methods=["GET"]),
             Route("/ACWeb/WS_Data/{service}.asmx/{method}", self._ws, methods=["POST"]),
             Route(HOME_PATH, self._home, methods=["GET"]),
+            Route(MESSAGES_PATH, self._messages, methods=["GET"]),
             Route("/ACWeb/paginas/General/MantenerSesion.aspx", self._keep_alive, methods=["GET"]),
             Route("/ACWeb/paginas/General/LogOff.aspx", self._log_off, methods=["GET"]),
         ]
@@ -502,6 +516,35 @@ class PortalSim:
         folder = FOLDER_OF_ID[str(params["idCarpeta"])]
         session.folder = folder
         return folder_selection(folder)
+
+    async def _messages(self, request: Request) -> Response:
+        session = self._live_session(request)
+        if session is None or self._family_of(session) is None:
+            return RedirectResponse(
+                f"{LOGON_PATH}?ReturnUrl={quote(MESSAGES_PATH, safe='')}", status_code=302
+            )
+        query = dict(request.query_params)
+        ajax = request.headers.get("x-requested-with") == "XMLHttpRequest"
+        numeric = set(query) == FEED_QUERY and all(query[n].isdecimal() for n in _FEED_NUMBERS)
+        if not (ajax and numeric) or int(query["rows"]) < 1 or int(query["page"]) < 1:
+            return _server_error()
+        rows, page = int(query["rows"]), int(query["page"])
+        held = self._mail_of(session, session.folder)
+        grid = {
+            "page": page,
+            "total": math.ceil(len(held) / rows),
+            "records": len(held),
+            "rows": [self._feed_row(message) for message in held[(page - 1) * rows : page * rows]],
+            "userdata": {},
+        }
+        return HTMLResponse(html_safe_json(grid))
+
+    def _feed_row(self, message: SimMessage) -> dict[str, object]:
+        cells = feed_cells(message)
+        width = self.options.feed_cell_count
+        if width is not None:
+            cells = [cells[index] if index < len(cells) else "" for index in range(width)]
+        return {"id": message.guid, "cell": cells}
 
     async def _home(self, request: Request) -> Response:
         session = self._live_session(request)
