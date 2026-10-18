@@ -61,6 +61,10 @@ description = "Start the REST API. Reads alexia-api.toml and ALEXIA_API_* variab
 cmd = "alexia-api demo"
 description = "Start the API against a simulated school portal. No account needed."
 
+[tasks.openapi]
+cmd = "alexia-api openapi"
+description = "Print the OpenAPI document. Example, pixi run openapi --output openapi.json."
+
 [tasks.init]
 cmd = "alexia-api init"
 description = "Write alexia-api.toml with your first account and show what to do next."

@@ -9,12 +9,13 @@ from alexia_api import __version__
 from tests.cli.conftest import UvicornCall
 from tests.cli.support import run
 
-COMMANDS = ("init", "doctor", "serve", "demo", "keys", "accounts")
+COMMANDS = ("init", "doctor", "serve", "demo", "openapi", "keys", "accounts")
 SCREENS = (
     ("init",),
     ("doctor",),
     ("serve",),
     ("demo",),
+    ("openapi",),
     ("keys",),
     ("keys", "create"),
     ("keys", "list"),

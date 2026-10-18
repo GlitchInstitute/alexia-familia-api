@@ -1,4 +1,5 @@
 import asyncio
+import json
 import os
 import sys
 from dataclasses import replace
@@ -9,6 +10,7 @@ import typer
 import uvicorn
 
 from alexia_api import __version__
+from alexia_api.api.app import openapi_document
 from alexia_api.cli.accounts import app as accounts_app
 from alexia_api.cli.keys import app as keys_app
 from alexia_api.cli.report import render, verdict
@@ -17,6 +19,7 @@ from alexia_api.config import CONFIG_ENV, DEFAULT_CONFIG_NAME
 from alexia_api.demo import address, banner, build_demo, demo_state
 from alexia_api.doctor import diagnose, probe_portals
 from alexia_api.logs import log_config
+from alexia_api.oserrors import why
 from alexia_api.scaffold import (
     DEFAULT_ACCOUNT,
     ScaffoldError,
@@ -191,3 +194,29 @@ def demo(host: HostOption = "127.0.0.1", port: PortOption = 8000) -> None:
                 demonstration.settings.log_level, demonstration.settings.log_format
             ),
         )
+
+
+@app.command()
+def openapi(
+    output: Annotated[
+        Path | None,
+        typer.Option(
+            "--output", "-o", help="Write the document to this file instead of the screen."
+        ),
+    ] = None,
+) -> None:
+    """Print the OpenAPI document of the REST API.
+
+    The document describes every route, parameter, and error. The server does not need to run
+    and no configuration is read, so the output is the same everywhere. Use it to make a client,
+    to open the API in an editor, or to see what changed between versions.
+    """
+    text = json.dumps(openapi_document(), indent=2) + "\n"
+    if output is None:
+        typer.echo(text, nl=False)
+        return
+    try:
+        output.expanduser().write_text(text, encoding="utf-8", newline="\n")
+    except OSError as error:
+        fail(f"{output} cannot be written, {why(error)}")
+    typer.echo(f"Wrote {output}.", err=True)
