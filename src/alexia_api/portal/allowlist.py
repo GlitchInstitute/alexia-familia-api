@@ -60,6 +60,20 @@ GET_ROSTER = WsCall(
     wire.RosterParams,
     TypeAdapter(list[wire.RosterItem]),
 )
+GET_FOLDER_TREE = WsCall(
+    "WSComunicados",
+    "GetArbolCarpetasJSON",
+    "read",
+    wire.FolderTreeParams,
+    _adapter(wire.FolderTreeReply),
+)
+SELECT_FOLDER = WsCall(
+    "WSComunicados",
+    "CarpetaSeleccionada",
+    "read",
+    wire.SelectFolderParams,
+    TypeAdapter(dict[str, object], config=ConfigDict(strict=True)),
+)
 
 _ENTRIES: Final[tuple[WsCall[Any, Any], ...]] = (
     VALIDAR,
@@ -68,6 +82,8 @@ _ENTRIES: Final[tuple[WsCall[Any, Any], ...]] = (
     CHECK_SESSION,
     GET_TRACKING,
     GET_ROSTER,
+    GET_FOLDER_TREE,
+    SELECT_FOLDER,
 )
 ALLOWLIST: Final[Mapping[str, WsCall[Any, Any]]] = MappingProxyType(
     {call.name: call for call in _ENTRIES}

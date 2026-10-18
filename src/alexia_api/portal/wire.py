@@ -6,7 +6,7 @@ strict about types, because a portal that starts sending a number as text should
 `portal_changed` and not turn into wrong data.
 """
 
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
@@ -101,3 +101,25 @@ class TrackingReply(WireModel):
 class RosterItem(WireModel):
     value: str = Field(alias="Valor")
     text: str = Field(alias="Texto")
+
+
+FolderId = Literal["IdCarpetaRecibidos", "IdCarpetaEnviados"]
+MessagesFlag = Literal["0"]
+"""The portal's `IsAutorizacion` flag. `0` lists messages. `1` lists authorization forms, which
+the folder calls do not read."""
+
+
+class FolderTreeParams(RequestModel):
+    is_authorization: MessagesFlag = Field(default="0", alias="IsAutorizacion")
+
+
+class FolderTreeReply(WireModel):
+    """The folders, as JSON text inside the JSON reply."""
+
+    nodes: str = Field(alias="nodos")
+
+
+class SelectFolderParams(RequestModel):
+    folder_id: FolderId = Field(alias="idCarpeta")
+    is_authorization: MessagesFlag = Field(default="0", alias="IsAutorizacion")
+    search_text: Literal[""] = Field(default="", alias="TextoBusqueda")

@@ -28,6 +28,14 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from alexia_api.clock import Clock, SystemClock
 from alexia_api.domain.errors import Interstitial
+from alexia_api.sim.mail import (
+    FOLDER_OF_ID,
+    SimFolder,
+    SimMessage,
+    folder_selection,
+    folder_tree,
+    newest_first,
+)
 from alexia_api.sim.world import SimChild, SimFamily, SimWorld, default_world, synthetic_guid
 
 BASE_URL: Final = "https://sim.invalid"
@@ -85,6 +93,7 @@ class SimSession:
     stage: Literal["anonymous", "validated", "authenticated"] = "anonymous"
     last_activity: float = 0.0
     family: SimFamily | None = None
+    folder: SimFolder = "received"
 
 
 @dataclass(frozen=True, slots=True)
@@ -260,6 +269,12 @@ class PortalSim:
         self.services: dict[str, Service] = {
             "WSHome.GetWPSeguimiento": Service(frozenset({"idAlumno"}), self._tracking),
             "WSReuniones.GetEmpleadosByHijo": Service(frozenset({"guidHijo"}), self._roster),
+            "WSComunicados.GetArbolCarpetasJSON": Service(
+                frozenset({"IsAutorizacion"}), self._folder_tree
+            ),
+            "WSComunicados.CarpetaSeleccionada": Service(
+                frozenset({"idCarpeta", "IsAutorizacion", "TextoBusqueda"}), self._select_folder
+            ),
         }
         routes = [
             Route(LOGON_PATH, self._logon, methods=["GET"]),
@@ -469,6 +484,24 @@ class PortalSim:
             for member in child.staff
         ]
         return [placeholder, *staff]
+
+    def _mail_of(self, session: SimSession, folder: SimFolder) -> list[SimMessage]:
+        family = self._family_of(session)
+        held = family.messages if family else ()
+        in_folder = (message for message in held if message.folder == folder)
+        return sorted(in_folder, key=newest_first, reverse=True)
+
+    def _folder_tree(self, session: SimSession, _params: dict[str, Any]) -> object:
+        counts: dict[SimFolder, int] = {
+            "received": len(self._mail_of(session, "received")),
+            "sent": len(self._mail_of(session, "sent")),
+        }
+        return folder_tree(counts, session.folder)
+
+    def _select_folder(self, session: SimSession, params: dict[str, Any]) -> object:
+        folder = FOLDER_OF_ID[str(params["idCarpeta"])]
+        session.folder = folder
+        return folder_selection(folder)
 
     async def _home(self, request: Request) -> Response:
         session = self._live_session(request)

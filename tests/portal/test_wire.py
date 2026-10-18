@@ -35,6 +35,9 @@ def test_request_parameters_refuse_unknown_fields() -> None:
         lambda: wire.ValidarParams(token="t", nickname="n", password=""),
         lambda: wire.CheckSessionParams(counter=-1),
         lambda: wire.CheckSessionParams(counter="1"),  # type: ignore[arg-type]
+        lambda: wire.FolderTreeParams(is_authorization="1"),  # type: ignore[arg-type]
+        lambda: wire.SelectFolderParams(folder_id="IdCarpetaBorradores"),  # type: ignore[arg-type]
+        lambda: wire.SelectFolderParams(folder_id="IdCarpetaRecibidos", search_text="x"),  # type: ignore[arg-type]
     ],
 )
 def test_request_parameters_refuse_bad_values(build: object) -> None:
@@ -87,6 +90,26 @@ def test_roster_items_use_the_portals_aliases() -> None:
     item = wire.RosterItem.model_validate({"Valor": GUID, "Texto": "Ana (Tutora)"})
 
     assert (item.value, item.text) == (GUID, "Ana (Tutora)")
+
+
+def test_folder_requests_carry_the_values_the_portal_expects() -> None:
+    tree = wire.FolderTreeParams()
+    chosen = wire.SelectFolderParams(folder_id="IdCarpetaEnviados")
+
+    assert json.loads(tree.model_dump_json(by_alias=True)) == {"IsAutorizacion": "0"}
+    assert json.loads(chosen.model_dump_json(by_alias=True)) == {
+        "idCarpeta": "IdCarpetaEnviados",
+        "IsAutorizacion": "0",
+        "TextoBusqueda": "",
+    }
+
+
+def test_the_folder_tree_reply_needs_only_the_tree() -> None:
+    reply = wire.FolderTreeReply.model_validate({"nodos": "[]", "carpeta": "x", "other": 1})
+
+    assert reply.nodes == "[]"
+    with pytest.raises(ValidationError):
+        wire.FolderTreeReply.model_validate({"carpeta": "IdCarpetaRecibidos"})
 
 
 def test_guid_text_must_be_a_guid() -> None:
