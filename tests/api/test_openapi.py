@@ -2,8 +2,11 @@ import json
 from typing import Any
 
 import pytest
+from openapi_spec_validator import validate
+from openapi_spec_validator.validation.exceptions import OpenAPIValidationError
 
 from alexia_api import __version__
+from alexia_api.api.app import openapi_document
 from alexia_api.api.openapi import (
     describe_validation_failures_as_problems,
     move_problems_to_their_media_type,
@@ -121,6 +124,38 @@ async def test_the_problem_schema_lists_what_a_client_can_rely_on(api: Api) -> N
     assert {"title", "status", "detail", "code", "request_id"} <= set(problem["required"])
     assert "type" not in problem["required"]
     assert problem["properties"]["type"]["default"] == "about:blank"
+
+
+def test_the_document_follows_the_openapi_standard() -> None:
+    validate(openapi_document())
+
+
+def test_the_validator_refuses_a_document_that_breaks_the_standard() -> None:
+    document = openapi_document()
+    del document["info"]
+
+    with pytest.raises(OpenAPIValidationError):
+        validate(document)
+
+
+async def test_the_document_without_a_server_is_the_one_a_server_serves(api: Api) -> None:
+    assert openapi_document() == await schema_of(api)
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"docs_enabled": False},
+        {"allow_writes": True},
+        {"cors_origins": ["https://app.example.test"]},
+        {"rate_limit_per_minute": 5},
+    ],
+    ids=lambda changes: next(iter(changes)),
+)
+async def test_no_setting_changes_the_document(make_api: MakeApi, changes: dict[str, Any]) -> None:
+    api = await make_api(**changes)
+
+    assert api.app.openapi() == openapi_document()
 
 
 async def test_the_document_is_built_once_and_served_from_then_on(api: Api) -> None:

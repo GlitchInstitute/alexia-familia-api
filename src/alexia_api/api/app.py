@@ -10,6 +10,7 @@ from fastapi import FastAPI
 from fastapi.routing import APIRoute
 from starlette.middleware.cors import CORSMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
+from starlette.types import Lifespan
 
 from alexia_api import __version__
 from alexia_api.api.deps import Services
@@ -65,6 +66,34 @@ def _startup_line(settings: Settings, registry: Registry) -> str:
     )
 
 
+def _declare(lifespan: Lifespan[FastAPI] | None, pages: dict[str, Any]) -> FastAPI:
+    """The app with its routes, its error handling, and its documentation, and no services yet.
+
+    The routes find their services through the request, so nothing here needs a setting.
+    """
+    app = FastAPI(
+        title="alexia-familia-api",
+        version=__version__,
+        summary="A REST API for the Alexia Familia parent portal",
+        description=DESCRIPTION,
+        openapi_tags=TAGS,
+        lifespan=lifespan,
+        generate_unique_id_function=_operation_id,
+        **pages,
+    )
+    install_handlers(app)
+    app.include_router(meta.router)
+    app.include_router(accounts.router)
+    app.include_router(children.router)
+    install_openapi(app)
+    return app
+
+
+def openapi_document() -> dict[str, Any]:
+    """The OpenAPI document of the server. No setting changes it, so no configuration is read."""
+    return _declare(None, {}).openapi()
+
+
 def create_app(
     settings: Settings | None = None,
     *,
@@ -106,22 +135,8 @@ def create_app(
         if settings.docs_enabled
         else {"docs_url": None, "redoc_url": None, "openapi_url": None}
     )
-    app = FastAPI(
-        title="alexia-familia-api",
-        version=__version__,
-        summary="A REST API for the Alexia Familia parent portal",
-        description=DESCRIPTION,
-        openapi_tags=TAGS,
-        lifespan=lifespan,
-        generate_unique_id_function=_operation_id,
-        **pages,
-    )
+    app = _declare(lifespan, pages)
     app.state.services = services
-    install_handlers(app)
-    app.include_router(meta.router)
-    app.include_router(accounts.router)
-    app.include_router(children.router)
-    install_openapi(app)
 
     if settings.cors_origins:
         app.add_middleware(
