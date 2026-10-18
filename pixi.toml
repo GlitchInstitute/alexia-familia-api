@@ -63,7 +63,7 @@ description = "Start the API against a simulated school portal. No account neede
 
 [tasks.init]
 cmd = "alexia-api init"
-description = "Write alexia-api.toml and create the first API key."
+description = "Write alexia-api.toml with your first account and show what to do next."
 
 [tasks.keys]
 cmd = "alexia-api keys"

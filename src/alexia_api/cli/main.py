@@ -1,6 +1,8 @@
 import asyncio
 import os
+import sys
 from dataclasses import replace
+from pathlib import Path
 from typing import Annotated
 
 import typer
@@ -8,10 +10,17 @@ import uvicorn
 
 from alexia_api import __version__
 from alexia_api.cli.report import render, verdict
-from alexia_api.cli.shared import ConfigOption
-from alexia_api.config import CONFIG_ENV
+from alexia_api.cli.shared import ConfigOption, fail
+from alexia_api.config import CONFIG_ENV, DEFAULT_CONFIG_NAME
 from alexia_api.doctor import diagnose, probe_portals
 from alexia_api.logs import log_config
+from alexia_api.scaffold import (
+    DEFAULT_ACCOUNT,
+    ScaffoldError,
+    next_steps,
+    render_starter,
+    write_starter,
+)
 
 app = typer.Typer(
     name="alexia-api",
@@ -38,6 +47,94 @@ def main(
     ),
 ) -> None:
     """Run and manage the alexia-familia-api server."""
+
+
+@app.command()
+def init(
+    config: Annotated[
+        Path | None,
+        typer.Option(
+            "--config",
+            "-c",
+            envvar=CONFIG_ENV,
+            help=(
+                "Where to write the file. Without this option the command writes the file that "
+                f"{CONFIG_ENV} names, or {DEFAULT_CONFIG_NAME} in the current folder."
+            ),
+        ),
+    ] = None,
+    account: Annotated[
+        str,
+        typer.Option(
+            help=(
+                "The name of the first account. It goes into URLs, so use lower case letters, "
+                "digits, and hyphens."
+            )
+        ),
+    ] = DEFAULT_ACCOUNT,
+    login_url: Annotated[
+        str | None,
+        typer.Option(
+            help=(
+                "The address of your school's login page. Without it the file holds an example "
+                "address that you replace."
+            )
+        ),
+    ] = None,
+    force: Annotated[bool, typer.Option("--force", help="Replace the file if it exists.")] = False,
+    print_only: Annotated[
+        bool, typer.Option("--print", help="Show the file on screen and write nothing.")
+    ] = False,
+) -> None:
+    """Write a starter configuration file and say what to do next.
+
+    The file lists every setting with its default and a short explanation. It holds no
+    password, only the names of the environment variables that do.
+    """
+    path = (config or Path(DEFAULT_CONFIG_NAME)).expanduser()
+    try:
+        text = render_starter(account, login_url)
+        if print_only:
+            typer.echo(text, nl=False)
+            return
+        write_starter(path, text, replace=force)
+    except ScaffoldError as error:
+        fail(str(error))
+    typer.echo(
+        next_steps(
+            path, account, has_login_url=login_url is not None, windows=sys.platform == "win32"
+        )
+    )
+
+
+@app.command()
+def doctor(
+    config: ConfigOption = None,
+    online: Annotated[
+        bool,
+        typer.Option(
+            "--online",
+            help=(
+                "Also open the login page of each portal. No password is sent, so this "
+                "cannot lock an account."
+            ),
+        ),
+    ] = False,
+) -> None:
+    """Check the setup and say what to fix.
+
+    Without --online nothing leaves this machine. The exit status is 1 when a line is marked
+    fail or stop, so a script can use this command as a check.
+    """
+    diagnosis = diagnose(config, os.environ)
+    if online and diagnosis.settings is not None:
+        probes = asyncio.run(probe_portals(diagnosis.settings))
+        diagnosis = replace(diagnosis, findings=(*diagnosis.findings, *probes))
+    typer.echo(render(diagnosis.findings))
+    typer.echo()
+    typer.echo(verdict(diagnosis.findings))
+    if diagnosis.failed:
+        raise typer.Exit(1)
 
 
 @app.command()
@@ -77,33 +174,3 @@ def serve(
         reload=reload,
         log_config=log_config(settings.log_level, settings.log_format),
     )
-
-
-@app.command()
-def doctor(
-    config: ConfigOption = None,
-    online: Annotated[
-        bool,
-        typer.Option(
-            "--online",
-            help=(
-                "Also open the login page of each portal. No password is sent, so this "
-                "cannot lock an account."
-            ),
-        ),
-    ] = False,
-) -> None:
-    """Check the setup and say what to fix.
-
-    Without --online nothing leaves this machine. The exit status is 1 when a line is marked
-    fail or stop, so a script can use this command as a check.
-    """
-    diagnosis = diagnose(config, os.environ)
-    if online and diagnosis.settings is not None:
-        probes = asyncio.run(probe_portals(diagnosis.settings))
-        diagnosis = replace(diagnosis, findings=(*diagnosis.findings, *probes))
-    typer.echo(render(diagnosis.findings))
-    typer.echo()
-    typer.echo(verdict(diagnosis.findings))
-    if diagnosis.failed:
-        raise typer.Exit(1)

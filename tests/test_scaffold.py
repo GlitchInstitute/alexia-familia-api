@@ -296,10 +296,10 @@ def test_the_steps_start_with_the_address_when_none_was_given() -> None:
         "  2. Put your portal login in the environment, so that no secret is in the file.\n"
         "       export PORTAL_MARTA_USERNAME='your user name'\n"
         "       export PORTAL_MARTA_PASSWORD='your password'\n"
-        "  3. Check the setup.\n"
-        "       alexia-api doctor\n"
-        "  4. Make a key for your phone or your program.\n"
+        "  3. Make a key for your phone or your program. It is shown once, so copy it.\n"
         "       alexia-api keys create phone\n"
+        "  4. Check the setup.\n"
+        "       alexia-api doctor\n"
         "  5. Start the server.\n"
         "       alexia-api serve"
     )

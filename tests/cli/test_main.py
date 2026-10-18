@@ -9,7 +9,7 @@ from alexia_api import __version__
 from tests.cli.conftest import UvicornCall
 from tests.cli.support import run
 
-COMMANDS = ("serve", "doctor")
+COMMANDS = ("init", "doctor", "serve")
 SCREEN = {"COLUMNS": "80"}
 HELP_WIDTH = 78
 
@@ -28,13 +28,17 @@ def description_paragraphs(help_text: str) -> list[list[str]]:
     return [paragraph for paragraph in paragraphs if paragraph]
 
 
-def test_without_arguments_it_lists_the_commands_and_starts_nothing(
+def test_without_arguments_it_lists_the_commands_in_the_order_a_newcomer_needs_them(
     uvicorn_calls: list[UvicornCall],
 ) -> None:
     result = run()
 
-    for command in COMMANDS:
-        assert command in result.output
+    listed = [
+        line.split()[0]
+        for line in result.output.partition("Commands:")[2].splitlines()
+        if line.startswith("  ") and not line.startswith("   ")
+    ]
+    assert listed == list(COMMANDS)
     assert uvicorn_calls == []
 
 

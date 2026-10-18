@@ -113,10 +113,11 @@ def next_steps(path: Path, account: str, *, has_login_url: bool, windows: bool =
             for part, shown in secrets
         )
     )
-    steps.append(f"Check the setup.\n       alexia-api doctor{hint}")
     steps.append(
-        f"Make a key for your phone or your program.\n       alexia-api keys create phone{hint}"
+        "Make a key for your phone or your program. It is shown once, so copy it.\n"
+        f"       alexia-api keys create phone{hint}"
     )
+    steps.append(f"Check the setup.\n       alexia-api doctor{hint}")
     steps.append(f"Start the server.\n       alexia-api serve{hint}")
     numbered = "\n".join(f"  {number}. {step}" for number, step in enumerate(steps, start=1))
     return f"Wrote {path} with the account {account}.\n\nNext\n{numbered}"
