@@ -73,6 +73,7 @@ def test_a_healthy_setup_has_nothing_to_report(tmp_path: Path) -> None:
     diagnosis = diagnose(path, ENVIRON)
 
     assert not diagnosis.failed
+    assert not diagnosis.blocked
     assert {finding.level for finding in diagnosis.findings} == {"ok"}
     assert [(finding.subject, finding.message) for finding in diagnosis.findings] == [
         ("config", f"read {path}"),
@@ -95,11 +96,12 @@ def test_nothing_configured_says_what_to_do_first(
     diagnosis = diagnose(None, {})
 
     assert diagnosis.failed
+    assert diagnosis.blocked
     assert diagnosis.findings[0] == Finding(
         "ok", "config", "no file found, the settings come from the environment"
     )
     [accounts] = about(diagnosis, "accounts")
-    assert accounts.level == "fail"
+    assert accounts.level == "stop"
     assert accounts.fix is not None
     assert "alexia-api init" in accounts.fix
     assert [finding.message for finding in about(diagnosis, "keys")] == [
@@ -141,44 +143,47 @@ def test_several_accounts_and_keys_are_listed_in_order(tmp_path: Path) -> None:
     assert [f.message for f in about(diagnosis, "keys")] == ["2 configured, phone, tablet"]
 
 
-def test_a_wrong_file_variable_is_one_failure_and_stops_there(tmp_path: Path) -> None:
+def test_a_wrong_file_variable_stops_the_server_with_one_finding(tmp_path: Path) -> None:
     diagnosis = diagnose(None, {"ALEXIA_API_CONFIG": str(tmp_path / "missing.toml")})
 
     assert diagnosis.settings is None
+    assert diagnosis.blocked
+    assert diagnosis.failed
     [finding] = diagnosis.findings
-    assert (finding.level, finding.subject) == ("fail", "config")
+    assert (finding.level, finding.subject) == ("stop", "config")
     assert "missing.toml" in finding.message
 
 
-def test_a_misspelled_setting_is_one_failure_that_names_it_and_stops_there(
-    tmp_path: Path,
-) -> None:
+def test_a_misspelled_setting_stops_the_server_and_is_named(tmp_path: Path) -> None:
     path = write_config(tmp_path, top="allow_wrties = true")
 
     diagnosis = diagnose(path, ENVIRON)
 
     assert diagnosis.settings is None
     [finding] = diagnosis.findings
-    assert (finding.level, finding.subject) == ("fail", "config")
+    assert (finding.level, finding.subject) == ("stop", "config")
     assert "allow_wrties" in finding.message
     assert finding.fix is not None
 
 
-def test_every_secret_that_cannot_be_read_is_a_failure_of_its_own(tmp_path: Path) -> None:
+def test_every_secret_that_cannot_be_read_stops_the_server_on_its_own_line(
+    tmp_path: Path,
+) -> None:
     path = write_config(tmp_path)
     make_key(tmp_path)
 
     diagnosis = diagnose(path, {})
 
-    failures = [f for f in about(diagnosis, "accounts.marta") if f.level == "fail"]
-    assert [failure.message for failure in failures] == [
+    stops = [f for f in about(diagnosis, "accounts.marta") if f.level == "stop"]
+    assert [stop.message for stop in stops] == [
         "accounts.marta.username refers to the environment variable MARTA_USER, which is not set",
         (
             "accounts.marta.password refers to the environment variable MARTA_PASSWORD, "
             "which is not set"
         ),
     ]
-    assert all(failure.fix is not None for failure in failures)
+    assert all(stop.fix is not None for stop in stops)
+    assert diagnosis.blocked
     assert [f.subject for f in diagnosis.findings][-2:] == ["state", "keys"]
 
 
@@ -278,6 +283,19 @@ def test_every_cause_of_a_pause_has_advice() -> None:
     assert set(HOW_TO_UNBLOCK) == set(get_args(BreakerCause))
 
 
+def test_a_pause_and_a_missing_key_fail_the_check_but_do_not_stop_the_server(
+    tmp_path: Path,
+) -> None:
+    path = write_config(tmp_path)
+    block(tmp_path, "invalid_credentials")
+
+    diagnosis = diagnose(path, ENVIRON)
+
+    assert {finding.level for finding in diagnosis.findings} == {"ok", "fail"}
+    assert diagnosis.failed
+    assert not diagnosis.blocked
+
+
 def test_a_state_directory_that_does_not_exist_yet_is_fine(tmp_path: Path) -> None:
     diagnosis = diagnose(write_config(tmp_path), ENVIRON)
 
@@ -288,7 +306,7 @@ def test_a_state_directory_that_does_not_exist_yet_is_fine(tmp_path: Path) -> No
 
 
 @pytest.mark.skipif(cannot_deny_access, reason="this account can write anywhere")
-def test_a_state_directory_that_cannot_be_written_is_a_failure(tmp_path: Path) -> None:
+def test_a_state_directory_that_cannot_be_written_stops_the_server(tmp_path: Path) -> None:
     locked = tmp_path / "locked"
     locked.mkdir()
     path = write_config(tmp_path, state=locked / "state")
@@ -299,7 +317,8 @@ def test_a_state_directory_that_cannot_be_written_is_a_failure(tmp_path: Path) -
         locked.chmod(0o700)
 
     [state] = about(diagnosis, "state")
-    assert state.level == "fail"
+    assert state.level == "stop"
+    assert diagnosis.blocked
     assert "cannot be written" in state.message
     assert state.fix is not None
     assert "state_dir" in state.fix
@@ -371,13 +390,13 @@ def test_the_switches_that_are_on_are_named_and_the_others_are_not(
     assert writes.message == f"switched on, {named}, so a key with the write scope can act as you"
 
 
-def test_forms_without_writes_is_a_failure_of_the_configuration(tmp_path: Path) -> None:
+def test_forms_without_writes_stops_the_server_as_a_configuration_error(tmp_path: Path) -> None:
     path = write_config(tmp_path, top="allow_forms = true")
 
     diagnosis = diagnose(path, ENVIRON)
 
     [finding] = diagnosis.findings
-    assert (finding.level, finding.subject) == ("fail", "config")
+    assert (finding.level, finding.subject) == ("stop", "config")
     assert "allow_forms needs allow_writes" in finding.message
 
 

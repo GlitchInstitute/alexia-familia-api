@@ -44,7 +44,13 @@ from alexia_api.services.health import state_dir_writable
 from alexia_api.services.keys import FILE_NAME, ApiKeyStore, KeyStoreError
 from alexia_api.services.registry import TransportFactory
 
-type Level = Literal["ok", "warn", "fail"]
+type Level = Literal["ok", "warn", "fail", "stop"]
+"""How much a finding matters.
+
+`ok` needs nothing. `warn` works but is risky or untidy. `fail` lets the server start but leaves
+something it needs broken, such as having no API key, which an operator may fix in a running
+container. `stop` means the server cannot start until a person fixes it.
+"""
 
 _EXAMPLE_TOP_LEVEL_NAMES: Final = frozenset({"test", "example", "invalid"})
 _EXAMPLE_DOMAINS: Final = frozenset({"example.com", "example.net", "example.org"})
@@ -77,7 +83,13 @@ class Diagnosis:
 
     @property
     def failed(self) -> bool:
-        return any(finding.level == "fail" for finding in self.findings)
+        """Something needs a person's attention, whether or not the server can start."""
+        return any(finding.level in {"fail", "stop"} for finding in self.findings)
+
+    @property
+    def blocked(self) -> bool:
+        """The server cannot start until a person fixes something."""
+        return any(finding.level == "stop" for finding in self.findings)
 
 
 def diagnose(config_file: Path | None, environ: Mapping[str, str]) -> Diagnosis:
@@ -87,7 +99,7 @@ def diagnose(config_file: Path | None, environ: Mapping[str, str]) -> Diagnosis:
         settings = load_settings(found)
     except ConfigError as error:
         return Diagnosis(
-            (Finding("fail", "config", str(error), "fix what is named above and run this again"),),
+            (Finding("stop", "config", str(error), "fix what is named above and run this again"),),
             None,
         )
     findings = [_where_it_was_read(found), *_accounts(settings, environ)]
@@ -146,7 +158,7 @@ def _accounts(settings: Settings, environ: Mapping[str, str]) -> list[Finding]:
     if not settings.accounts:
         return [
             Finding(
-                "fail",
+                "stop",
                 "accounts",
                 "no account is configured",
                 "run `alexia-api init` to write a starter file, or try `alexia-api demo` first",
@@ -169,7 +181,7 @@ def _account(
         read_account_secrets(name, account, environ)
     except ConfigError as error:
         findings.extend(
-            Finding("fail", subject, line, "set the variable or fix the file and run this again")
+            Finding("stop", subject, line, "set the variable or fix the file and run this again")
             for line in str(error).splitlines()
         )
     else:
@@ -231,7 +243,7 @@ def _state_directory(settings: Settings) -> Finding:
     directory = settings.state_dir
     if not state_dir_writable(directory):
         return Finding(
-            "fail",
+            "stop",
             "state",
             f"{directory} cannot be written",
             "make it writable for the user that runs the server, or set state_dir elsewhere",
