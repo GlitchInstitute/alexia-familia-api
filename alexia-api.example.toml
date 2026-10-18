@@ -1,0 +1,107 @@
+# alexia-familia-api configuration.
+#
+# A line that starts with # is a comment. The settings below are optional, and each one
+# shows its default. Remove the # in front of a setting to change it.
+#
+# Any setting can also come from an environment variable. Write ALEXIA_API_, then the name
+# in capital letters, with two underscores between a table and its setting. For example,
+# ALEXIA_API_CACHE__TRACKING=60 sets tracking in the cache table. A variable wins over
+# this file.
+#
+# Keep passwords out of this file. Name an environment variable or a file that holds them.
+
+# Where the server keeps its few files, such as the API key hashes and the account blocks.
+# A relative path starts at the folder of the configuration file.
+# state_dir = "state"
+
+# The school's time zone name. Times in responses carry this zone's offset.
+# timezone = "Europe/Madrid"
+
+# Lets API keys with the write scope send messages and meeting requests.
+# allow_writes = false
+
+# Lets the server answer forms. This needs allow_writes as well.
+# allow_forms = false
+
+# Puts a message back to unread at the portal after the API opened it. Reading a message
+# marks it read at the portal otherwise.
+# restore_unread = false
+
+# The least number of seconds between two requests to the same portal. A pause keeps the
+# server gentle on the school's portal. It must be at least 0.1 and at most 60.
+# min_spacing_seconds = 0.15
+
+# Seconds to wait for the portal to answer one request. It must be more than 0 and at most
+# 300.
+# request_timeout_seconds = 30
+
+# How many requests one API key may make each minute. Zero turns it off. It must be at
+# least 0.
+# rate_limit_per_minute = 120
+
+# Serves /docs, /redoc, and /openapi.json. The /docs page loads its scripts from a public
+# CDN in your browser. Turn this off when the server is on the internet.
+# docs_enabled = true
+
+# Web pages from these origins may call the API in a browser. In a variable, separate the
+# origins with commas.
+# cors_origins = []
+
+# Answer only requests for these host names. Empty means any. In a variable, separate the
+# names with commas.
+# allowed_hosts = []
+
+# How much the server writes to its log.
+# log_level = "info"
+
+# Plain lines for people, or one JSON object per line.
+# log_format = "text"
+
+# How long answers are reused before the portal is asked again. Zero turns the reuse off.
+# Remove the # in front of the table name too when you change a setting below it.
+# [cache]
+
+# Seconds to reuse the list of children. It must be at least 0.
+# children = 900
+
+# Seconds to reuse the five tracking counters. It must be at least 0.
+# tracking = 120
+
+# Seconds to reuse the staff a guardian can meet. It must be at least 0.
+# staff = 3600
+
+# One block for each portal login. The name after "accounts." goes into URLs, so use lower
+# case letters, digits, and hyphens. One login lists all of a parent's children, so a
+# parent with two children needs a single block. Add another block for another parent's
+# login.
+[accounts.family]
+# A name for people, shown in responses. Defaults to the account name. It must be at least
+# 1 character and at most 80 characters.
+# label = "Our family"
+
+# The address of the portal's login page, pasted as is. The server takes the portal
+# address and the school key from it. Use this or portal_url with institution_key.
+login_url = "https://portal.example.test/ACWeb/LogOn.aspx?key=your-school-key"
+
+# The portal's web address without a path, for example https://portal.example.test.
+# portal_url = "https://portal.example.test"
+
+# The school key, which is the value after key= in the login page's address. It must be at
+# least 1 character.
+# institution_key = "your-school-key"
+
+# The guardian's portal user name. Write `env:NAME` to read it from an environment
+# variable or `file:/path` to read it from a file.
+username = "env:PORTAL_FAMILY_USERNAME"
+
+# The guardian's portal password. Write `env:NAME` to read it from an environment variable
+# or `file:/path` to read it from a file, so the config file holds no secret.
+password = "env:PORTAL_FAMILY_PASSWORD"
+
+# Which role to sign in with when the login has several. Usually not needed.
+# role_id = "5afe0000-0000-4000-8000-000000000501"
+
+# Pins a child's name in URLs. Each key is a slug and each value is the child's student
+# id, so URLs stay the same when a sibling is added.
+# [accounts.family.slugs]
+# lucia = "5afe0000-0000-4000-8000-000000000101"
