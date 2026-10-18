@@ -195,9 +195,13 @@ class AccountSettings(Model):
 class CacheTtls(Model):
     """How long each kind of answer is reused before the portal is asked again, in seconds."""
 
-    children: float = Field(default=900, ge=0, description="The list of children.")
-    tracking: float = Field(default=120, ge=0, description="The five tracking counters.")
-    staff: float = Field(default=3600, ge=0, description="The staff a guardian can meet.")
+    children: float = Field(default=900, ge=0, description="Seconds to reuse the list of children.")
+    tracking: float = Field(
+        default=120, ge=0, description="Seconds to reuse the five tracking counters."
+    )
+    staff: float = Field(
+        default=3600, ge=0, description="Seconds to reuse the staff a guardian can meet."
+    )
 
 
 def _split_list(value: object) -> object:
@@ -225,7 +229,10 @@ class Settings(BaseSettings):
     )
     state_dir: Path = Field(
         default=Path("state"),
-        description="Where the server keeps its few files, such as API key hashes and blocks.",
+        description=(
+            "Where the server keeps its few files, such as the API key hashes and the account "
+            "blocks. A relative path starts at the folder of the configuration file."
+        ),
     )
     timezone: str = Field(
         default="Europe/Madrid",
@@ -250,13 +257,16 @@ class Settings(BaseSettings):
         default=0.15,
         ge=0.1,
         le=60,
-        description="The least time between two requests to the same portal. Be polite.",
+        description=(
+            "The least number of seconds between two requests to the same portal. "
+            "A pause keeps the server gentle on the school's portal."
+        ),
     )
     request_timeout_seconds: float = Field(
         default=30,
         gt=0,
         le=300,
-        description="How long to wait for the portal to answer one request.",
+        description="Seconds to wait for the portal to answer one request.",
     )
     rate_limit_per_minute: int = Field(
         default=120,
@@ -272,11 +282,17 @@ class Settings(BaseSettings):
     )
     cors_origins: Annotated[list[str], NoDecode] = Field(
         default_factory=list,
-        description="Web pages from these origins may call the API in a browser. Comma separated.",
+        description=(
+            "Web pages from these origins may call the API in a browser. "
+            "In a variable, separate the origins with commas."
+        ),
     )
     allowed_hosts: Annotated[list[str], NoDecode] = Field(
         default_factory=list,
-        description="Answer only requests for these host names. Empty means any. Comma separated.",
+        description=(
+            "Answer only requests for these host names. Empty means any. "
+            "In a variable, separate the names with commas."
+        ),
     )
     log_level: LogLevel = Field(
         default="info", description="How much the server writes to its log."
@@ -284,7 +300,13 @@ class Settings(BaseSettings):
     log_format: LogFormat = Field(
         default="text", description="Plain lines for people, or one JSON object per line."
     )
-    cache: CacheTtls = Field(default_factory=CacheTtls, description="How long answers are reused.")
+    cache: CacheTtls = Field(
+        default_factory=CacheTtls,
+        description=(
+            "How long answers are reused before the portal is asked again. "
+            "Zero turns the reuse off."
+        ),
+    )
 
     @field_validator("cors_origins", "allowed_hosts", mode="before")
     @classmethod
