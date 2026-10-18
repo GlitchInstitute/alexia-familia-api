@@ -1,12 +1,15 @@
 """What the operator can configure, where it is read from, and how secrets are read.
 
 Settings come from a TOML file and from `ALEXIA_API_*` environment variables, and a variable wins
-over the file. Unknown names are errors, so a typo cannot quietly turn a safety switch back into
-its default. Error messages name the setting and never show a value, because a value may be a
-password.
+over the file. Unknown names are errors in the file and in the environment, so a typo cannot
+quietly turn a safety switch back into its default. Error messages name the setting and never
+show a value, because a value may be a password.
 """
 
+import difflib
 import json
+import os
+import re
 import tomllib
 from collections.abc import Mapping
 from pathlib import Path
@@ -36,9 +39,14 @@ from alexia_api.domain.ids import (
     parse_student_id,
 )
 
-CONFIG_ENV: Final = "ALEXIA_API_CONFIG"
+ENV_PREFIX: Final = "ALEXIA_API_"
+ENV_NESTED_DELIMITER: Final = "__"
+CONFIG_ENV: Final = f"{ENV_PREFIX}CONFIG"
 DEFAULT_CONFIG_NAME: Final = "alexia-api.toml"
 _LOCAL_HOSTS: Final = frozenset({"localhost", "127.0.0.1", "::1"})
+_PLATFORM_VARIABLES: Final = re.compile(
+    r"service_(host|port)(_.+)?|port(_\d+_(tcp|udp)(_.+)?)?|name|env_.+"
+)
 
 
 class ConfigError(Exception):
@@ -200,8 +208,8 @@ class Settings(BaseSettings):
     """Everything the operator can configure."""
 
     model_config = SettingsConfigDict(
-        env_prefix="ALEXIA_API_",
-        env_nested_delimiter="__",
+        env_prefix=ENV_PREFIX,
+        env_nested_delimiter=ENV_NESTED_DELIMITER,
         extra="forbid",
         frozen=True,
     )
@@ -340,10 +348,40 @@ def _explain(error: ValidationError) -> str:
     return "the configuration has problems\n  " + "\n  ".join(lines)
 
 
+def unknown_variables(environ: Mapping[str, str]) -> list[str]:
+    """The `ALEXIA_API_` variables that name no setting, which is nearly always a typo.
+
+    A typo in a file is an error, so one in a variable has to be too. Otherwise a server could
+    run without the restriction its operator thought they had set. Container platforms add
+    variables with this prefix when a service has the project's name, and those are skipped.
+    """
+    settings = set(Settings.model_fields) | {CONFIG_ENV.removeprefix(ENV_PREFIX).lower()}
+    unknown = []
+    for name in environ:
+        if not name.upper().startswith(ENV_PREFIX):
+            continue
+        setting = name[len(ENV_PREFIX) :].split(ENV_NESTED_DELIMITER, 1)[0].lower()
+        if setting not in settings and not _PLATFORM_VARIABLES.fullmatch(setting):
+            unknown.append(name)
+    return sorted(unknown)
+
+
+def _suggest(name: str) -> str:
+    setting = name[len(ENV_PREFIX) :].split(ENV_NESTED_DELIMITER, 1)[0].lower()
+    close = difflib.get_close_matches(setting, sorted(Settings.model_fields), n=1)
+    return f", did you mean {ENV_PREFIX}{close[0].upper()}?" if close else ""
+
+
 def load_settings(config_file: Path | None = None) -> Settings:
     """Read the settings from a TOML file, if given, and from the environment."""
     if config_file is not None and not config_file.is_file():
         raise ConfigError(f"the configuration file {config_file} does not exist")
+    unknown = unknown_variables(os.environ)
+    if unknown:
+        lines = [f"{name} names no setting{_suggest(name)}" for name in unknown]
+        raise ConfigError(
+            "the environment has variables that are not settings\n  " + "\n  ".join(lines)
+        )
 
     class FromFile(Settings):
         model_config = SettingsConfigDict(toml_file=config_file)

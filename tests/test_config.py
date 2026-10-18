@@ -7,9 +7,11 @@ from pydantic import SecretStr
 
 from alexia_api.config import (
     ConfigError,
+    Settings,
     find_config_file,
     load_settings,
     read_secret,
+    unknown_variables,
 )
 from alexia_api.domain.accounts import Capabilities
 
@@ -322,3 +324,96 @@ def test_a_secret_that_cannot_be_read_says_where_it_looked(reference: str, expec
 
     assert "accounts.marta.password" in str(raised.value)
     assert expected in str(raised.value)
+
+
+def test_a_misspelled_variable_is_an_error_that_suggests_the_right_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ALEXIA_API_DOCS_ENABLEDD", "do-not-print-this")
+
+    with pytest.raises(ConfigError) as raised:
+        load_settings(None)
+
+    message = str(raised.value)
+    assert "ALEXIA_API_DOCS_ENABLEDD names no setting" in message
+    assert "did you mean ALEXIA_API_DOCS_ENABLED?" in message
+    assert "do-not-print-this" not in message
+
+
+def test_a_misspelled_variable_in_a_nested_name_suggests_the_top_level_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ALEXIA_API_ACCOUNT__MARTA__USERNAME", "marta.ejemplo")
+
+    with pytest.raises(ConfigError, match="did you mean ALEXIA_API_ACCOUNTS"):
+        load_settings(None)
+
+
+def test_a_variable_that_resembles_nothing_gets_no_suggestion(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ALEXIA_API_ZZZZ", "1")
+
+    with pytest.raises(ConfigError) as raised:
+        load_settings(None)
+
+    assert "ALEXIA_API_ZZZZ names no setting" in str(raised.value)
+    assert "did you mean" not in str(raised.value)
+
+
+def test_every_misspelled_variable_is_reported_together_in_order() -> None:
+    environ = {"ALEXIA_API_B_WRONG": "1", "ALEXIA_API_A_WRONG": "1", "ALEXIA_API_PORT_TYPO": "1"}
+
+    assert unknown_variables(environ) == [
+        "ALEXIA_API_A_WRONG",
+        "ALEXIA_API_B_WRONG",
+        "ALEXIA_API_PORT_TYPO",
+    ]
+
+
+@pytest.mark.parametrize("name", sorted(Settings.model_fields))
+def test_the_variable_for_every_setting_is_accepted(name: str) -> None:
+    assert unknown_variables({f"ALEXIA_API_{name.upper()}": "x"}) == []
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "ALEXIA_API_CONFIG",
+        "ALEXIA_API_ACCOUNTS__MARTA__PASSWORD",
+        "ALEXIA_API_CACHE__TRACKING",
+        "alexia_api_allow_writes",
+    ],
+)
+def test_nested_lowercase_and_file_variables_are_accepted(name: str) -> None:
+    assert unknown_variables({name: "x"}) == []
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "ALEXIA_API_SERVICE_HOST",
+        "ALEXIA_API_SERVICE_PORT",
+        "ALEXIA_API_SERVICE_PORT_HTTP",
+        "ALEXIA_API_PORT",
+        "ALEXIA_API_PORT_8000_TCP",
+        "ALEXIA_API_PORT_8000_TCP_ADDR",
+        "ALEXIA_API_NAME",
+        "ALEXIA_API_ENV_SOMETHING",
+    ],
+)
+def test_variables_that_container_platforms_add_are_not_mistaken_for_typos(name: str) -> None:
+    assert unknown_variables({name: "x"}) == []
+
+
+def test_a_name_that_only_starts_like_a_platform_variable_is_still_a_typo() -> None:
+    assert unknown_variables({"ALEXIA_API_PORTAL_URL": "x"}) == ["ALEXIA_API_PORTAL_URL"]
+
+
+@pytest.mark.parametrize("name", ["ALEXIA_API", "ALEXIA_APIX_FOO", "OTHER_ALEXIA_API_FOO", "PATH"])
+def test_variables_without_the_prefix_are_not_looked_at(name: str) -> None:
+    assert unknown_variables({name: "x"}) == []
+
+
+def test_a_misspelled_variable_is_caught_whatever_its_case() -> None:
+    assert unknown_variables({"alexia_api_docs_enabledd": "x"}) == ["alexia_api_docs_enabledd"]
