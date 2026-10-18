@@ -69,6 +69,10 @@ description = "Write alexia-api.toml with your first account and show what to do
 cmd = "alexia-api keys"
 description = "Make, list, and revoke API keys. Example, pixi run keys create phone."
 
+[tasks.accounts]
+cmd = "alexia-api accounts"
+description = "List the accounts, or lift a pause on a login. Example, pixi run accounts reset marta."
+
 [tasks.doctor]
 cmd = "alexia-api doctor"
 description = "Check the configuration, the state directory, and the portal address."

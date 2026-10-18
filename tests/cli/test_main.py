@@ -9,7 +9,7 @@ from alexia_api import __version__
 from tests.cli.conftest import UvicornCall
 from tests.cli.support import run
 
-COMMANDS = ("init", "doctor", "serve", "keys")
+COMMANDS = ("init", "doctor", "serve", "keys", "accounts")
 SCREENS = (
     ("init",),
     ("doctor",),
@@ -18,6 +18,9 @@ SCREENS = (
     ("keys", "create"),
     ("keys", "list"),
     ("keys", "revoke"),
+    ("accounts",),
+    ("accounts", "list"),
+    ("accounts", "reset"),
 )
 HEADINGS = {"Arguments:", "Options:", "Commands:"}
 SCREEN = {"COLUMNS": "80"}

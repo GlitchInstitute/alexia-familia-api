@@ -36,8 +36,8 @@ def make_key(directory: Path, name: str = "phone", accounts: tuple[str, ...] = (
     ApiKeyStore(directory / "state" / FILE_NAME).create(name, scopes=["read"], accounts=accounts)
 
 
-def block(directory: Path, cause: BreakerCause) -> None:
+def block(directory: Path, cause: BreakerCause, account: str = "marta") -> None:
     BreakerStore(directory / "state" / BREAKER_DIRECTORY).write(
-        parse_account_id("marta"),
+        parse_account_id(account),
         Blocked(cause=cause, since=datetime(2026, 10, 18, 20, 15, tzinfo=UTC)),
     )

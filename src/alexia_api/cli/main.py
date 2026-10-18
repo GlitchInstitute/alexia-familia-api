@@ -9,6 +9,7 @@ import typer
 import uvicorn
 
 from alexia_api import __version__
+from alexia_api.cli.accounts import app as accounts_app
 from alexia_api.cli.keys import app as keys_app
 from alexia_api.cli.report import render, verdict
 from alexia_api.cli.shared import ConfigOption, fail, make_app
@@ -25,6 +26,7 @@ from alexia_api.scaffold import (
 
 app = make_app("alexia-api", "Run and manage the alexia-familia-api server.")
 app.add_typer(keys_app)
+app.add_typer(accounts_app)
 
 
 def _print_version(show: bool) -> None:
