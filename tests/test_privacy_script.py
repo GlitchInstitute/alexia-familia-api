@@ -63,11 +63,43 @@ def test_an_email_outside_the_safe_domains_fails_without_echoing_it(tmp_path: Pa
     assert "someone.private" not in result.stderr + result.stdout
 
 
-@pytest.mark.parametrize("address", ["a@example.test", "1+x@users.noreply.github.com"])
+@pytest.mark.parametrize(
+    "address",
+    [
+        "a@example.test",
+        "a@portal.example.test",
+        "a@sim.invalid",
+        "a@school.example",
+        "a@box.localhost",
+        "a@example.org",
+        "a@www.example.com",
+        "1+x@users.noreply.github.com",
+    ],
+)
 def test_safe_email_domains_pass(tmp_path: Path, address: str) -> None:
     write(tmp_path, "a.md", f"{address}\n")
 
     assert run(tmp_path).returncode == 0
+
+
+@pytest.mark.parametrize(
+    "domain",
+    [
+        "example.test.attacker.com",
+        "notexample.com",
+        "evil-example.org",
+        "test.com",
+        "mail.noreply.github.com",
+        "github.com",
+    ],
+)
+def test_a_domain_that_only_looks_reserved_still_fails(tmp_path: Path, domain: str) -> None:
+    write(tmp_path, "a.md", f"x@{domain}\n")
+
+    result = run(tmp_path)
+
+    assert result.returncode == 1
+    assert "a.md:1 email outside the safe domains" in result.stderr
 
 
 def test_a_word_from_the_denylist_fails_and_accents_do_not_hide_it(tmp_path: Path) -> None:

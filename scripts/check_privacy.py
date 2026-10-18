@@ -5,7 +5,9 @@ This repository is public and its tests, fixtures, and docs must only hold inven
 check has three rules.
 
 1. A GUID outside the synthetic range `5afe0000-0000-4000-8000-xxxxxxxxxxxx`.
-2. An email address outside the safe domains.
+2. An email address outside the safe domains. These are the names that RFC 2606 and RFC 6761
+   reserve for examples and tests, and the GitHub no-reply domain, so no real person owns an
+   address there.
 3. A word whose hash is in a local denylist. The denylist is opt-in and never committed. It is a
    file with one SHA-256 digest per line, made from lower-cased, accent-stripped words of at
    least four letters, so the file itself does not reveal the names it protects.
@@ -33,7 +35,9 @@ GUID: Final = re.compile(r"\b[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\b", re.
 SYNTHETIC_GUID: Final = re.compile(r"5afe0000-0000-4000-8000-[0-9a-f]{12}", re.IGNORECASE)
 EMAIL: Final = re.compile(r"[A-Za-z0-9._%+-]+@([A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+)")
 HUNK: Final = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@")
-SAFE_EMAIL_DOMAINS: Final = frozenset({"example.test", "users.noreply.github.com"})
+RESERVED_TOP_LEVEL_NAMES: Final = frozenset({"test", "example", "invalid", "localhost"})
+RESERVED_DOMAINS: Final = ("example.com", "example.net", "example.org")
+NOREPLY_DOMAIN: Final = "users.noreply.github.com"
 MIN_TOKEN_LENGTH: Final = 4
 DENYLIST_ENVIRONMENT: Final = "ALEXIA_API_DENYLIST"
 DEFAULT_DENYLIST: Final = ".denylist.sha256"
@@ -72,6 +76,14 @@ def load_denylist(path: Path) -> frozenset[str]:
     return frozenset(line.strip() for line in lines if line.strip())
 
 
+def is_safe_email_domain(domain: str) -> bool:
+    """Whether nobody can own an address at this domain."""
+    name = domain.lower().rstrip(".")
+    if name.rsplit(".", 1)[-1] in RESERVED_TOP_LEVEL_NAMES or name == NOREPLY_DOMAIN:
+        return True
+    return any(name == reserved or name.endswith(f".{reserved}") for reserved in RESERVED_DOMAINS)
+
+
 def problems_in(line: str, denylist: frozenset[str] | None) -> list[str]:
     found: list[str] = []
     found.extend(
@@ -82,7 +94,7 @@ def problems_in(line: str, denylist: frozenset[str] | None) -> list[str]:
     found.extend(
         "email outside the safe domains"
         for match in EMAIL.finditer(line)
-        if match.group(1).lower() not in SAFE_EMAIL_DOMAINS
+        if not is_safe_email_domain(match.group(1))
     )
     if denylist is not None and any(hash_token(word) in denylist for word in tokenize(line)):
         found.append("word from the local denylist")
