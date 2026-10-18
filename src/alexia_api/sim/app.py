@@ -1,9 +1,9 @@
 """A fake Alexia portal, for tests and for the demo.
 
 It speaks the shapes the real portal speaks, from the logon token to the script services, and it
-serves synthetic families only. Tests drive it in process through `PortalSim.transport()`. The
-demo serves it on a real socket. Faults are switches on `PortalSim.options`, so each failure path
-in the client has a test that causes it on purpose.
+serves synthetic families only. Tests and the demo drive it in process through
+`PortalSim.transport()`. Faults are switches on `PortalSim.options`, so each failure path in the
+client has a test that causes it on purpose.
 
 The simulator is an independent statement of the protocol. It repeats paths and refusal texts as
 literals and imports nothing from `alexia_api.portal`, so a wrong constant in the client cannot
@@ -190,7 +190,7 @@ class _Tracker:
         self._sim = sim
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        if scope["type"] != "http" or str(scope["path"]).startswith("/__sim"):
+        if scope["type"] != "http":
             await self._app(scope, receive, send)
             return
         status = 0
@@ -247,7 +247,6 @@ class PortalSim:
         *,
         options: SimOptions | None = None,
         clock: Clock | None = None,
-        control: bool = True,
     ) -> None:
         self.world = world or default_world()
         self.options = options or SimOptions()
@@ -269,12 +268,6 @@ class PortalSim:
             Route("/ACWeb/paginas/General/MantenerSesion.aspx", self._keep_alive, methods=["GET"]),
             Route("/ACWeb/paginas/General/LogOff.aspx", self._log_off, methods=["GET"]),
         ]
-        if control:
-            routes += [
-                Route("/__sim/requests", self._control_requests, methods=["GET"]),
-                Route("/__sim/expire", self._control_expire, methods=["POST"]),
-                Route("/__sim/options", self._control_options, methods=["POST"]),
-            ]
         self.app = Starlette(routes=routes, middleware=[Middleware(_Tracker, sim=self)])
 
     def transport(self) -> httpx.AsyncBaseTransport:
@@ -495,23 +488,3 @@ class PortalSim:
         if session is not None:
             self.sessions.pop(session.id, None)
         return RedirectResponse(LOGON_PATH, status_code=302)
-
-    async def _control_requests(self, _request: Request) -> Response:
-        return JSONResponse(
-            [
-                {"method": entry.method, "path": entry.path, "status": entry.status}
-                for entry in self.requests
-            ]
-        )
-
-    async def _control_expire(self, _request: Request) -> Response:
-        self.expire_all_sessions()
-        return JSONResponse({"ok": True})
-
-    async def _control_options(self, request: Request) -> Response:
-        changes = await request.json()
-        if not isinstance(changes, dict) or not all(hasattr(self.options, key) for key in changes):
-            return JSONResponse({"ok": False}, status_code=400)
-        for key, value in changes.items():
-            setattr(self.options, key, value)
-        return JSONResponse({"ok": True})
