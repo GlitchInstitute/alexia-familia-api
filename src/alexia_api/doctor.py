@@ -91,6 +91,11 @@ class Diagnosis:
         """The server cannot start until a person fixes something."""
         return any(finding.level == "stop" for finding in self.findings)
 
+    @property
+    def startable_settings(self) -> Settings | None:
+        """The settings the server can start with, or None while a person has something to fix."""
+        return None if self.blocked else self.settings
+
 
 def diagnose(config_file: Path | None, environ: Mapping[str, str]) -> Diagnosis:
     """Check the configuration and the files next to it. Nothing here calls a portal."""

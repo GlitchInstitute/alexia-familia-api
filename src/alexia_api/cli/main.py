@@ -64,8 +64,8 @@ def serve(
         typer.echo(render(notices), err=True)
         typer.echo(err=True)
         typer.echo(verdict(diagnosis.findings), err=True)
-    settings = diagnosis.settings
-    if settings is None or diagnosis.blocked:
+    settings = diagnosis.startable_settings
+    if settings is None:
         raise typer.Exit(1)
     if config is not None:
         os.environ[CONFIG_ENV] = str(config)

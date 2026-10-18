@@ -118,6 +118,46 @@ def test_a_wrong_file_variable_stops_the_server_with_one_finding(tmp_path: Path)
     assert "missing.toml" in finding.message
 
 
+def test_a_setup_that_can_start_hands_over_its_settings(tmp_path: Path) -> None:
+    path = write_config(tmp_path)
+    make_key(tmp_path)
+
+    diagnosis = diagnose(path, ENVIRON)
+
+    assert diagnosis.settings is not None
+    assert diagnosis.startable_settings is diagnosis.settings
+
+
+def test_a_failure_that_does_not_stop_the_server_still_hands_over_the_settings(
+    tmp_path: Path,
+) -> None:
+    diagnosis = diagnose(write_config(tmp_path), ENVIRON)
+
+    assert diagnosis.failed
+    assert not diagnosis.blocked
+    assert diagnosis.settings is not None
+    assert diagnosis.startable_settings is diagnosis.settings
+
+
+def test_settings_that_load_but_leave_the_server_blocked_are_not_handed_over(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+
+    diagnosis = diagnose(None, {})
+
+    assert diagnosis.settings is not None
+    assert diagnosis.blocked
+    assert diagnosis.startable_settings is None
+
+
+def test_a_configuration_that_does_not_load_has_no_settings_to_hand_over(tmp_path: Path) -> None:
+    diagnosis = diagnose(None, {"ALEXIA_API_CONFIG": str(tmp_path / "missing.toml")})
+
+    assert diagnosis.settings is None
+    assert diagnosis.startable_settings is None
+
+
 def test_a_misspelled_setting_stops_the_server_and_is_named(tmp_path: Path) -> None:
     path = write_config(tmp_path, top="allow_wrties = true")
 
