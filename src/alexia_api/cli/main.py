@@ -1,7 +1,15 @@
+import asyncio
+import os
+from dataclasses import replace
+from typing import Annotated
+
 import typer
 import uvicorn
 
 from alexia_api import __version__
+from alexia_api.cli.report import render, verdict
+from alexia_api.cli.shared import ConfigOption
+from alexia_api.doctor import diagnose, probe_portals
 
 app = typer.Typer(
     name="alexia-api",
@@ -44,3 +52,33 @@ def serve(
         port=port,
         reload=reload,
     )
+
+
+@app.command()
+def doctor(
+    config: ConfigOption = None,
+    online: Annotated[
+        bool,
+        typer.Option(
+            "--online",
+            help=(
+                "Also open the login page of each portal. No password is sent, so this "
+                "cannot lock an account."
+            ),
+        ),
+    ] = False,
+) -> None:
+    """Check the setup and say what to fix.
+
+    Without --online nothing leaves this machine. The exit status is 1 when a line is marked
+    fail or stop, so a script can use this command as a check.
+    """
+    diagnosis = diagnose(config, os.environ)
+    if online and diagnosis.settings is not None:
+        probes = asyncio.run(probe_portals(diagnosis.settings))
+        diagnosis = replace(diagnosis, findings=(*diagnosis.findings, *probes))
+    typer.echo(render(diagnosis.findings))
+    typer.echo()
+    typer.echo(verdict(diagnosis.findings))
+    if diagnosis.failed:
+        raise typer.Exit(1)
