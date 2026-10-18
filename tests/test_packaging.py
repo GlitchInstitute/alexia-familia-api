@@ -1,8 +1,13 @@
 import re
+import shlex
 import tomllib
 from pathlib import Path
 
-from alexia_api import __version__
+import pytest
+import typer.main
+
+from alexia_api import __version__, cli
+from tests.cli.support import run
 
 ROOT = Path(__file__).resolve().parent.parent
 CONDA_NAME_FOR = {"fastapi": "fastapi-core", "tzdata": "python-tzdata"}
@@ -52,3 +57,30 @@ def test_the_workspace_version_matches_the_package_version() -> None:
     workspace = _load("pixi.toml")["workspace"]
     assert isinstance(workspace, dict)
     assert workspace["version"] == __version__
+
+
+def _alexia_tasks() -> dict[str, str]:
+    tasks = _load("pixi.toml")["tasks"]
+    assert isinstance(tasks, dict)
+    commands: dict[str, str] = {}
+    for name, task in tasks.items():
+        assert isinstance(task, dict)
+        if str(task["cmd"]).startswith("alexia-api"):
+            commands[str(name)] = str(task["cmd"])
+    return commands
+
+
+ALEXIA_TASKS = _alexia_tasks()
+
+
+def test_every_command_has_a_pixi_task_of_the_same_name() -> None:
+    commands = set(typer.main.get_group(cli.app).commands)
+
+    assert set(ALEXIA_TASKS) == commands
+
+
+@pytest.mark.parametrize("name", ALEXIA_TASKS)
+def test_every_pixi_task_runs_a_command_that_exists(name: str) -> None:
+    result = run(*shlex.split(ALEXIA_TASKS[name])[1:], "--help")
+
+    assert result.exit_code == 0, f"the task {name} runs `{ALEXIA_TASKS[name]}`, which fails"
