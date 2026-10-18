@@ -1,12 +1,12 @@
 """Messages between the school and the guardian, and the folders that hold them."""
 
 from datetime import date
-from typing import Final, Literal, get_args
+from typing import Final, Literal, Self, get_args
 
-from pydantic import Field
+from pydantic import AwareDatetime, Field
 
 from alexia_api.domain.base import Model
-from alexia_api.domain.ids import MessageId
+from alexia_api.domain.ids import AttachmentId, MessageId
 
 FolderName = Literal["received", "sent"]
 FOLDER_NAMES: Final[tuple[FolderName, ...]] = get_args(FolderName)
@@ -100,3 +100,69 @@ class Link(Model):
             "is none of the kinds this API knows."
         )
     )
+
+
+class Attachment(Model):
+    """A file that came with a message."""
+
+    id: AttachmentId = Field(
+        description=(
+            "A token that names the file within its message. Treat it as opaque. It is safe to "
+            "put in a URL path."
+        )
+    )
+    name: str = Field(description="The file's name as the sender gave it.")
+    size: int = Field(ge=0, description="The file's size in bytes, as the portal lists it.")
+
+
+class Translation(Model):
+    """The message in another language, when the sender wrote one."""
+
+    slot: Literal[2, 3] = Field(
+        description=(
+            "The portal keeps up to three versions of a message and does not name their "
+            "languages. The message itself is the first version, so a translation is the "
+            "second or the third."
+        )
+    )
+    subject: str
+    body: Body
+
+
+class MessageContent(Model):
+    """What the page of a message adds to the message's row in the list."""
+
+    sent_at: AwareDatetime = Field(
+        description=(
+            "When the school sent the message, to the minute, with the school's offset. The "
+            "list gives only a day, and the time comes from the message itself."
+        )
+    )
+    body: Body = Field(description="The words of the message.")
+    links: tuple[Link, ...] = Field(
+        description=(
+            "The addresses in the body, each once. The ones in links come first, then the ones "
+            "written out in the words. Translations are not searched."
+        )
+    )
+    attachments: tuple[Attachment, ...]
+    translations: tuple[Translation, ...] = Field(
+        description="Other versions of the message, second before third. Empty when there are none."
+    )
+    child_names: str | None = Field(
+        description=(
+            "The names of the children the portal says the message is about, in the one text "
+            "the portal writes them in, or null when it names none. The portal gives names and "
+            "no ids, so this API cannot tie them to its list of children."
+        )
+    )
+    can_reply: bool = Field(description="Whether the portal offers a reply to this message.")
+
+
+class Message(MessageContent, MessageSummary):
+    """A message with its words. The fields of its row in the list come first."""
+
+    @classmethod
+    def of(cls, summary: MessageSummary, content: MessageContent) -> Self:
+        """Join a row of the list to the message page that the row opens."""
+        return cls(**dict(summary), **dict(content))
