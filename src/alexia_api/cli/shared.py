@@ -23,6 +23,16 @@ ConfigOption = Annotated[
 ]
 
 
+HostOption = Annotated[
+    str,
+    typer.Option(
+        help="Address to listen on. Use 0.0.0.0 to accept other machines, as in a container."
+    ),
+]
+
+PortOption = Annotated[int, typer.Option(help="Port to listen on.")]
+
+
 def make_app(name: str, summary: str) -> typer.Typer:
     """A command group with the choices that every group of this command line shares."""
     return typer.Typer(

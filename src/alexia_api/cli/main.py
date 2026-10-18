@@ -12,7 +12,7 @@ from alexia_api import __version__
 from alexia_api.cli.accounts import app as accounts_app
 from alexia_api.cli.keys import app as keys_app
 from alexia_api.cli.report import render, verdict
-from alexia_api.cli.shared import ConfigOption, fail, make_app
+from alexia_api.cli.shared import ConfigOption, HostOption, PortOption, fail, make_app
 from alexia_api.config import CONFIG_ENV, DEFAULT_CONFIG_NAME
 from alexia_api.doctor import diagnose, probe_portals
 from alexia_api.logs import log_config
@@ -138,13 +138,8 @@ def doctor(
 @app.command()
 def serve(
     config: ConfigOption = None,
-    host: Annotated[
-        str,
-        typer.Option(
-            help="Address to listen on. Use 0.0.0.0 to accept other machines, as in a container."
-        ),
-    ] = "127.0.0.1",
-    port: Annotated[int, typer.Option(help="Port to listen on.")] = 8000,
+    host: HostOption = "127.0.0.1",
+    port: PortOption = 8000,
     reload: Annotated[bool, typer.Option(help="Reload on code changes. For development.")] = False,
 ) -> None:
     """Check the setup, then start the REST API.
