@@ -7,7 +7,6 @@ reach a student id that the portal did not list for that login, whatever id the 
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from typing import Self
-from urllib.parse import urlsplit
 
 import httpx
 
@@ -60,7 +59,7 @@ class AccountRuntime:
     ) -> None:
         self.account = account
         self.label = settings.label or account
-        self._host = urlsplit(settings.base_url).netloc
+        self._host = settings.portal_host
         self._pins: Mapping[StudentId, ChildSlug] = settings.pinned_slugs()
         self._gateway = gateway
         self._cache = cache

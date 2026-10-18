@@ -63,6 +63,7 @@ def test_a_config_file_defines_accounts(tmp_path: Path) -> None:
 
     account = settings.accounts["marta"]
     assert account.base_url == "https://portal.example.test"
+    assert account.portal_host == "portal.example.test"
     assert account.key == "demo-school"
     assert account.label is None
     assert account.role_id is None
@@ -87,6 +88,7 @@ password = "demo-password-a"
     account = load_settings(write(tmp_path, text)).accounts["marta"]
 
     assert account.base_url == "https://portal.example.test:8443"
+    assert account.portal_host == "portal.example.test:8443"
     assert account.key == "demo-school"
 
 

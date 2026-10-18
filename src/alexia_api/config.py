@@ -178,6 +178,11 @@ class AccountSettings(Model):
         return _origin(self.login_url or self.portal_url or "", "the portal address")
 
     @property
+    def portal_host(self) -> str:
+        """The portal's host name, with the port when the address names one."""
+        return urlsplit(self.base_url).netloc
+
+    @property
     def key(self) -> str:
         """The school key the portal's login page needs."""
         if self.login_url is not None:
