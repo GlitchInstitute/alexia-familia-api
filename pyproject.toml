@@ -79,8 +79,8 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["S101", "S105", "S106", "ARG001", "ARG002", "DTZ001"]
-# The simulator's logins are fake and public. `alexia-api demo` prints them for people to try.
+"tests/**" = ["S101", "S104", "S105", "S106", "ARG001", "ARG002", "DTZ001"]
+# The simulator's logins are fake and public. The demo signs in with them.
 "src/alexia_api/sim/world.py" = ["S105"]
 
 [tool.ruff.lint.isort]

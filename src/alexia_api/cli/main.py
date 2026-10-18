@@ -14,6 +14,7 @@ from alexia_api.cli.keys import app as keys_app
 from alexia_api.cli.report import render, verdict
 from alexia_api.cli.shared import ConfigOption, HostOption, PortOption, fail, make_app
 from alexia_api.config import CONFIG_ENV, DEFAULT_CONFIG_NAME
+from alexia_api.demo import address, banner, build_demo, demo_state
 from alexia_api.doctor import diagnose, probe_portals
 from alexia_api.logs import log_config
 from alexia_api.scaffold import (
@@ -167,3 +168,26 @@ def serve(
         reload=reload,
         log_config=log_config(settings.log_level, settings.log_format),
     )
+
+
+@app.command()
+def demo(host: HostOption = "127.0.0.1", port: PortOption = 8000) -> None:
+    """Start the REST API against a simulated school. No account or password is needed.
+
+    The families and children are made up, and nothing the demo changes outlives it. Your
+    configuration file and your ALEXIA_API_ variables are not read. The command shows a key and
+    some requests to try.
+    """
+    with demo_state() as state_dir:
+        demonstration = build_demo(state_dir)
+        base = address(host, port)
+        typer.echo(banner(base, demonstration.key, windows=sys.platform == "win32"), err=True)
+        typer.echo(err=True)
+        uvicorn.run(
+            demonstration.app,
+            host=host,
+            port=port,
+            log_config=log_config(
+                demonstration.settings.log_level, demonstration.settings.log_format
+            ),
+        )
