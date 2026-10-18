@@ -5,11 +5,16 @@ from collections.abc import AsyncIterator
 from pathlib import Path
 
 import pytest
+from hypothesis import settings
 
 from alexia_api.clock import ManualClock
 from alexia_api.sim.app import PortalSim
 from alexia_api.sim.world import default_world
 from tests.harness import Failure, Harness, failure_of
+
+settings.register_profile("dev")
+settings.register_profile("ci", derandomize=True, database=None, print_blob=True)
+settings.load_profile(os.environ.get("HYPOTHESIS_PROFILE", "dev"))
 
 
 @pytest.fixture(autouse=True)

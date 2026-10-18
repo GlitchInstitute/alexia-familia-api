@@ -84,7 +84,7 @@ description = "Check the configuration, the state directory, and the portal addr
 [feature.dev.tasks]
 watch = { cmd = "alexia-api serve --reload", description = "Start the REST API and reload on code changes." }
 test = { cmd = "pytest", description = "Run the test suite." }
-cov = { cmd = "pytest --cov --cov-report=term-missing --cov-fail-under=90", description = "Run the test suite and enforce the coverage floor." }
+cov = { cmd = "pytest --cov --cov-report=term-missing --cov-fail-under=90", env = { HYPOTHESIS_PROFILE = "ci" }, description = "Run the test suite with fixed property test examples and enforce the coverage floor." }
 lint = { cmd = "ruff check . && ruff format --check .", description = "Check style and common mistakes." }
 fmt = { cmd = "ruff check --fix . && ruff format .", description = "Fix style problems and format the code." }
 typecheck = { cmd = "mypy", description = "Type check with mypy in strict mode." }
