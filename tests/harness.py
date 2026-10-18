@@ -18,6 +18,7 @@ from alexia_api.portal.login import PortalCredentials
 from alexia_api.portal.session import Gates, PortalSession
 from alexia_api.services.registry import Registry
 from alexia_api.sim.app import PortalSim
+from alexia_api.sim.mail import SimMessage
 from alexia_api.sim.world import (
     DEMO_PASSWORD_A,
     DEMO_PASSWORD_B,
@@ -142,6 +143,17 @@ class Harness:
         world = self.sim.world
         families = tuple(
             replace(family, children=(*family.children, child))
+            if family.username == username
+            else family
+            for family in world.families
+        )
+        self.sim.world = replace(world, families=families)
+
+    def deliver(self, username: str, message: SimMessage) -> None:
+        """The school sends a family a message. A session that is already open sees it next."""
+        world = self.sim.world
+        families = tuple(
+            replace(family, messages=(*family.messages, message))
             if family.username == username
             else family
             for family in world.families

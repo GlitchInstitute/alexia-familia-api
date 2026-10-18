@@ -22,10 +22,13 @@ from alexia_api.domain.ids import (
     parse_account_id,
     parse_role_id,
 )
+from alexia_api.domain.messages import Folder, FolderName
 from alexia_api.domain.security import Principal
 from alexia_api.portal.breaker import BREAKER_DIRECTORY, BreakerStore
 from alexia_api.portal.children import read_home
+from alexia_api.portal.folders import read_folder_tree
 from alexia_api.portal.gateway import CheckResult, Gateway
+from alexia_api.portal.inbox import Feed, read_feed
 from alexia_api.portal.login import PortalCredentials
 from alexia_api.portal.roster import read_roster
 from alexia_api.portal.session import Gates, PortalSession
@@ -112,6 +115,26 @@ class AccountRuntime:
             return tuple(await self._gateway.call(lambda tx: read_roster(tx, child.id)))
 
         return await self._cache.get(("staff", child.id), self._ttls.staff, load, fresh=fresh)
+
+    async def folders(self, *, fresh: bool = False) -> Cached[tuple[Folder, ...]]:
+        return await self._cache.get(
+            ("folders",),
+            self._ttls.folders,
+            lambda: self._gateway.call(read_folder_tree),
+            fresh=fresh,
+        )
+
+    async def messages(self, folder: FolderName, *, fresh: bool = False) -> Cached[Feed]:
+        """Every message of a folder, newest first.
+
+        The whole listing is kept, so a client that pages through it costs the portal one read.
+        """
+        return await self._cache.get(
+            ("messages", folder),
+            self._ttls.messages,
+            lambda: self._gateway.call(lambda tx: read_feed(tx, folder)),
+            fresh=fresh,
+        )
 
     async def check(self, *, fresh: bool = False) -> CheckResult:
         """Make sure a session works, logging in if needed. This is the one call that logs in."""

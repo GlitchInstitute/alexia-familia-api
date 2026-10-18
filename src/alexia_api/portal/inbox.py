@@ -38,7 +38,7 @@ class Feed:
     """Every message of one folder, newest first."""
 
     records: int
-    rows: tuple[MessageSummary, ...]
+    messages: tuple[MessageSummary, ...]
     truncated: bool
 
 
@@ -150,7 +150,7 @@ async def read_feed(
     """
     await select_folder(tx, folder)
     first = await read_feed_page(tx, rows=page_size, page=1)
-    rows = list(first.rows)
+    messages = list(first.rows)
     for page in range(2, min(first.pages, max_pages) + 1):
-        rows.extend((await read_feed_page(tx, rows=page_size, page=page)).rows)
-    return Feed(records=first.records, rows=tuple(rows), truncated=first.pages > max_pages)
+        messages.extend((await read_feed_page(tx, rows=page_size, page=page)).rows)
+    return Feed(records=first.records, messages=tuple(messages), truncated=first.pages > max_pages)

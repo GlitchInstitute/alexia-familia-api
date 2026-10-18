@@ -315,7 +315,7 @@ async def test_reads_the_received_messages_of_each_family_newest_first(
     feed = await feed_of(gateway)
 
     expected = seeded(username, "received")
-    assert feed == Feed(records=len(expected), rows=expected, truncated=False)
+    assert feed == Feed(records=len(expected), messages=expected, truncated=False)
     assert len(expected) > 1
     assert any(row.read is False for row in expected)
     assert any(row.read is True for row in expected)
@@ -329,7 +329,7 @@ async def test_reads_the_folder_it_is_asked_for_whichever_one_the_portal_showed_
 
     for folder in asked:
         feed = await feed_of(gateway, folder)
-        assert feed.rows == seeded("marta.ejemplo", folder)
+        assert feed.messages == seeded("marta.ejemplo", folder)
 
     assert 0 < len(seeded("marta.ejemplo", "sent")) < len(seeded("marta.ejemplo", "received"))
 
@@ -341,7 +341,7 @@ async def test_a_small_page_size_reads_every_page_and_lists_every_message_once(
 
     feed = await feed_of(gateway, page_size=3)
 
-    assert feed.rows == seeded("marta.ejemplo", "received")
+    assert feed.messages == seeded("marta.ejemplo", "received")
     queries = feed_queries(harness)
     assert [query["page"] for query in queries] == ["1", "2", "3"]
     assert {query["rows"] for query in queries} == {"3"}
@@ -353,7 +353,7 @@ async def test_pages_past_the_limit_are_left_unread_and_the_feed_says_so(harness
     feed = await feed_of(gateway, page_size=3, max_pages=2)
 
     everything = seeded("marta.ejemplo", "received")
-    assert feed.rows == everything[:6]
+    assert feed.messages == everything[:6]
     assert feed.records == len(everything)
     assert feed.truncated
     assert [query["page"] for query in feed_queries(harness)] == ["1", "2"]
@@ -364,7 +364,7 @@ async def test_a_limit_that_fits_every_page_is_not_truncated(harness: Harness) -
 
     feed = await feed_of(gateway, page_size=3, max_pages=3)
 
-    assert len(feed.rows) == feed.records
+    assert len(feed.messages) == feed.records
     assert not feed.truncated
 
 
@@ -375,7 +375,7 @@ async def test_a_folder_with_no_messages_costs_one_request(harness: Harness) -> 
 
     feed = await feed_of(harness.gateway())
 
-    assert feed == Feed(records=0, rows=(), truncated=False)
+    assert feed == Feed(records=0, messages=(), truncated=False)
     assert len(feed_queries(harness)) == 1
 
 
@@ -447,5 +447,5 @@ async def test_a_session_that_ended_is_replaced_and_the_reader_never_notices(
     harness.sim.expire_all_sessions()
     feed = await feed_of(gateway, "sent")
 
-    assert feed.rows == seeded("marta.ejemplo", "sent")
+    assert feed.messages == seeded("marta.ejemplo", "sent")
     assert harness.sim.counters.login_attempts == 2

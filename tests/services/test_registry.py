@@ -1,5 +1,6 @@
 """The registry gives each account its own gateway and cache, and finds children through them."""
 
+from dataclasses import replace
 from datetime import timedelta
 
 import pytest
@@ -12,9 +13,10 @@ from alexia_api.domain.errors import BreakerOpen, InvalidCredentials
 from alexia_api.domain.ids import parse_account_id
 from alexia_api.domain.security import Principal
 from alexia_api.portal.breaker import BreakerStore
+from alexia_api.portal.inbox import Feed
 from alexia_api.services.errors import NotFoundError
-from alexia_api.services.registry import Registry
-from alexia_api.sim.world import DEMO_PASSWORD_B, DEMO_USER_B, synthetic_guid
+from alexia_api.services.registry import Directory, Registry
+from alexia_api.sim.world import DEMO_PASSWORD_B, DEMO_USER_B, default_world, synthetic_guid
 from tests.harness import Failure, Harness
 
 LUCIA = synthetic_guid(0x101)
@@ -231,6 +233,138 @@ async def test_staff_is_cached_for_longer_than_tracking(
 
     assert (await runtime.tracking(lucia)).status == "miss"
     assert (await runtime.staff(lucia)).status == "hit"
+
+
+@pytest.mark.parametrize(("name", "received", "sent"), [("marta", 8, 2), ("pablo", 3, 1)])
+async def test_each_account_lists_the_folders_of_its_own_mailbox(
+    harness: Harness, name: str, received: int, sent: int
+) -> None:
+    folders = (await harness.registry().get(name).folders()).value
+
+    assert [(folder.name, folder.count) for folder in folders] == [
+        ("received", received),
+        ("sent", sent),
+    ]
+
+
+async def test_the_folders_are_kept_for_five_minutes(harness: Harness, clock: ManualClock) -> None:
+    runtime = harness.registry().get("marta")
+    first = await runtime.folders()
+    calls = len(harness.sim.requests)
+
+    clock.advance(299)
+    second = await runtime.folders()
+    assert len(harness.sim.requests) == calls
+    clock.advance(2)
+    third = await runtime.folders()
+
+    assert (first.status, second.status, third.status) == ("miss", "hit", "miss")
+
+
+async def test_a_fresh_look_at_the_folders_reads_the_portal_again(harness: Harness) -> None:
+    runtime = harness.registry().get("marta")
+    await runtime.folders()
+    calls = len(harness.sim.requests)
+
+    again = await runtime.folders(fresh=True)
+
+    assert again.status == "bypass"
+    assert len(harness.sim.requests) > calls
+
+
+async def test_the_messages_of_each_folder_and_each_account_are_kept_apart(
+    harness: Harness,
+) -> None:
+    registry = harness.registry()
+    marta = registry.get("marta")
+
+    received = await marta.messages("received")
+    sent = await marta.messages("sent")
+    pablo = await registry.get("pablo").messages("received")
+
+    received_ids, sent_ids, pablo_ids = (
+        {message.id for message in listing.value.messages} for listing in (received, sent, pablo)
+    )
+    assert (len(received_ids), len(sent_ids), len(pablo_ids)) == (8, 2, 3)
+    assert received_ids.isdisjoint(sent_ids)
+    assert received_ids.isdisjoint(pablo_ids)
+    assert [listing.status for listing in (received, sent, pablo)] == ["miss", "miss", "miss"]
+
+
+async def test_every_kind_of_answer_is_kept_under_a_key_of_its_own(harness: Harness) -> None:
+    runtime = harness.registry().get("marta")
+    lucia = (await runtime.child("lucia")).value
+
+    async def everything() -> list[object]:
+        return [
+            (await runtime.directory()).value,
+            (await runtime.folders()).value,
+            (await runtime.messages("received")).value,
+            (await runtime.messages("sent")).value,
+            (await runtime.tracking(lucia)).value,
+            (await runtime.staff(lucia)).value,
+        ]
+
+    first = await everything()
+    again = await everything()
+
+    assert [type(answer) for answer in first] == [
+        Directory,
+        tuple,
+        Feed,
+        Feed,
+        TrackingCounters,
+        tuple,
+    ]
+    assert again == first
+
+
+async def test_a_message_list_is_read_once_however_often_it_is_asked_for(
+    harness: Harness,
+) -> None:
+    runtime = harness.registry().get("marta")
+    first = await runtime.messages("received")
+    calls = len(harness.sim.requests)
+
+    second = await runtime.messages("received")
+
+    assert (first.status, second.status) == ("miss", "hit")
+    assert second.value == first.value
+    assert len(harness.sim.requests) == calls
+
+
+async def test_a_message_list_is_read_again_after_two_minutes(
+    harness: Harness, clock: ManualClock
+) -> None:
+    runtime = harness.registry().get("marta")
+    await runtime.messages("received")
+
+    clock.advance(119)
+    assert (await runtime.messages("received")).status == "hit"
+    clock.advance(2)
+
+    assert (await runtime.messages("received")).status == "miss"
+
+
+async def test_a_fresh_look_sees_a_message_that_arrived_since(harness: Harness) -> None:
+    runtime = harness.registry().get("marta")
+    before = await runtime.messages("received")
+    arrived = replace(
+        default_world().families[0].messages[0],
+        guid=synthetic_guid(0x1100),
+        subject="Nuevo aviso",
+        date="2026-10-17",
+        read=False,
+    )
+    harness.deliver("marta.ejemplo", arrived)
+
+    stale = await runtime.messages("received")
+    fresh = await runtime.messages("received", fresh=True)
+
+    assert stale.value == before.value
+    assert fresh.status == "bypass"
+    assert len(fresh.value.messages) == len(before.value.messages) + 1
+    assert fresh.value.messages[0].subject == "Nuevo aviso"
 
 
 async def test_a_blocked_account_does_not_stop_the_other_account(

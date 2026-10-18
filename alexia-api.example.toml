@@ -70,6 +70,12 @@
 # Seconds to reuse the staff a guardian can meet. It must be at least 0.
 # staff = 3600
 
+# Seconds to reuse the list of message folders. It must be at least 0.
+# folders = 300
+
+# Seconds to reuse the list of messages in a folder. It must be at least 0.
+# messages = 120
+
 # One block for each portal login. The name after "accounts." goes into URLs, so use lower
 # case letters, digits, and hyphens. One login lists all of a parent's children, so a
 # parent with two children needs a single block. Add another block for another parent's

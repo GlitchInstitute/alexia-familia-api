@@ -207,6 +207,12 @@ class CacheTtls(Model):
     staff: float = Field(
         default=3600, ge=0, description="Seconds to reuse the staff a guardian can meet."
     )
+    folders: float = Field(
+        default=300, ge=0, description="Seconds to reuse the list of message folders."
+    )
+    messages: float = Field(
+        default=120, ge=0, description="Seconds to reuse the list of messages in a folder."
+    )
 
 
 def _split_list(value: object) -> object:
