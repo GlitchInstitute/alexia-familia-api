@@ -129,6 +129,12 @@ def test_star_stands_for_all_accounts_and_absorbs_the_rest(store: ApiKeyStore) -
     assert issued.record.accounts == ["*"]
 
 
+def test_an_account_named_twice_is_kept_once(store: ApiKeyStore) -> None:
+    issued = store.create("one", scopes={"read"}, accounts=["pablo", "marta", "pablo"])
+
+    assert issued.record.accounts == ["marta", "pablo"]
+
+
 def test_keys_are_listed_without_their_secrets(store: ApiKeyStore) -> None:
     store.create("one", scopes={"read", "feed"}, accounts={"marta"})
     store.create("two", scopes={"admin"}, accounts={"*"})

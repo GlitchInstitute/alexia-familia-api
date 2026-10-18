@@ -193,4 +193,4 @@ def _check_accounts(accounts: Collection[str]) -> list[str]:
             parse_account_id(account)
         except InvalidIdError:
             raise KeyStoreError(f"{account} is not a valid account name") from None
-    return sorted(accounts)
+    return sorted(set(accounts))
