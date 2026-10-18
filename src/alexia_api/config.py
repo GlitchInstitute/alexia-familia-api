@@ -12,6 +12,7 @@ import os
 import re
 import tomllib
 from collections.abc import Mapping
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, Final, Literal, Self
 from urllib.parse import parse_qs, urlsplit
@@ -451,37 +452,69 @@ def find_config_file(environ: Mapping[str, str], *, cwd: Path | None = None) -> 
     return candidate if candidate.is_file() else None
 
 
-def read_secret(reference: SecretStr, *, setting: str, environ: Mapping[str, str]) -> SecretStr:
-    """Turn a setting into the secret it stands for.
+@dataclass(frozen=True, slots=True)
+class FromEnvironment:
+    """The setting names an environment variable that holds the secret."""
 
-    The text is the secret itself, unless it starts with `env:` and names an environment variable
-    or starts with `file:` and names a file. Only the line ending is removed from a file, because
-    a password may start or end with a space.
+    name: str
+
+
+@dataclass(frozen=True, slots=True)
+class FromFile:
+    """The setting names a file that holds the secret."""
+
+    path: str
+
+
+@dataclass(frozen=True, slots=True)
+class WrittenHere:
+    """The setting is the secret itself. It carries no text, so it cannot leak one."""
+
+
+type SecretSource = FromEnvironment | FromFile | WrittenHere
+
+
+def secret_source(reference: SecretStr) -> SecretSource:
+    """Say where a setting keeps its secret, without reading the secret.
+
+    A person writes `env:NAME` or `file:/path` to keep the secret out of the configuration file.
+    The prefix is in lower case. Any other text is the secret itself.
     """
     text = reference.get_secret_value()
     if text.startswith("env:"):
-        name = text.removeprefix("env:").strip()
-        if not name:
+        return FromEnvironment(text.removeprefix("env:").strip())
+    if text.startswith("file:"):
+        return FromFile(text.removeprefix("file:").strip())
+    return WrittenHere()
+
+
+def read_secret(reference: SecretStr, *, setting: str, environ: Mapping[str, str]) -> SecretStr:
+    """Turn a setting into the secret it stands for.
+
+    Only the line ending is removed from a file, because a password may start or end with a space.
+    """
+    match secret_source(reference):
+        case FromEnvironment(name=""):
             raise ConfigError(f"{setting} says env: but names no environment variable")
-        found = environ.get(name)
-        if found is None:
-            raise ConfigError(
-                f"{setting} refers to the environment variable {name}, which is not set"
-            )
-        value = found
-    elif text.startswith("file:"):
-        path = text.removeprefix("file:").strip()
-        if not path:
+        case FromEnvironment(name=name):
+            found = environ.get(name)
+            if found is None:
+                raise ConfigError(
+                    f"{setting} refers to the environment variable {name}, which is not set"
+                )
+            value = found
+        case FromFile(path=""):
             raise ConfigError(f"{setting} says file: but names no file")
-        try:
-            content = Path(path).read_text(encoding="utf-8")
-        except OSError:
-            raise ConfigError(
-                f"{setting} refers to the file {path}, which cannot be read"
-            ) from None
-        value = content.removesuffix("\n").removesuffix("\r")
-    else:
-        value = text
+        case FromFile(path=path):
+            try:
+                content = Path(path).read_text(encoding="utf-8")
+            except OSError:
+                raise ConfigError(
+                    f"{setting} refers to the file {path}, which cannot be read"
+                ) from None
+            value = content.removesuffix("\n").removesuffix("\r")
+        case WrittenHere():
+            value = reference.get_secret_value()
     if not value:
         raise ConfigError(f"{setting} is empty")
     return SecretStr(value)

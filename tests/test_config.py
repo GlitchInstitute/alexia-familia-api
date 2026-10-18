@@ -9,12 +9,17 @@ from alexia_api.config import (
     AccountSettings,
     ConfigError,
     FixedSettings,
+    FromEnvironment,
+    FromFile,
+    SecretSource,
     Settings,
+    WrittenHere,
     find_config_file,
     load_settings,
     read_account_secrets,
     read_secret,
     resolve_secrets,
+    secret_source,
     unknown_variables,
 )
 from alexia_api.domain.accounts import Capabilities
@@ -316,9 +321,9 @@ def test_a_secret_can_name_a_file_and_only_the_line_ending_is_dropped(tmp_path: 
     ("reference", "expected"),
     [
         ("env:NOT_SET_ANYWHERE", "NOT_SET_ANYWHERE"),
-        ("env:", "environment variable"),
+        ("env:", "says env: but names no environment variable"),
         ("file:/no/such/place", "/no/such/place"),
-        ("file:", "file"),
+        ("file:", "says file: but names no file"),
         ("", "empty"),
     ],
 )
@@ -328,6 +333,29 @@ def test_a_secret_that_cannot_be_read_says_where_it_looked(reference: str, expec
 
     assert "accounts.marta.password" in str(raised.value)
     assert expected in str(raised.value)
+
+
+@pytest.mark.parametrize(
+    ("reference", "expected"),
+    [
+        ("env:MARTA_PASSWORD", FromEnvironment("MARTA_PASSWORD")),
+        ("env:  MARTA_PASSWORD  ", FromEnvironment("MARTA_PASSWORD")),
+        ("env:", FromEnvironment("")),
+        ("file:/run/secrets/marta", FromFile("/run/secrets/marta")),
+        ("file: /run/secrets/marta ", FromFile("/run/secrets/marta")),
+        ("file:  ", FromFile("")),
+        ("hunter2", WrittenHere()),
+        ("ENV:MARTA_PASSWORD", WrittenHere()),
+        ("file", WrittenHere()),
+        ("", WrittenHere()),
+    ],
+)
+def test_a_setting_says_where_its_secret_is_kept(reference: str, expected: SecretSource) -> None:
+    assert secret_source(SecretStr(reference)) == expected
+
+
+def test_a_secret_written_in_the_file_leaves_no_trace_in_its_source() -> None:
+    assert repr(secret_source(SecretStr("hunter2"))) == "WrittenHere()"
 
 
 def test_a_misspelled_variable_is_an_error_that_suggests_the_right_name(
