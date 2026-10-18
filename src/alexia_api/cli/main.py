@@ -18,6 +18,7 @@ app = typer.Typer(
     help="Run and manage the alexia-familia-api server.",
     no_args_is_help=True,
     add_completion=False,
+    rich_markup_mode=None,
 )
 
 
@@ -33,7 +34,6 @@ def main(
         False,
         "--version",
         callback=_print_version,
-        is_eager=True,
         help="Show the version and exit.",
     ),
 ) -> None:
