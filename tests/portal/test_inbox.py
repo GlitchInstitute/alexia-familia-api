@@ -10,8 +10,8 @@ import pytest
 
 from alexia_api.domain.errors import PortalError, SchemaDrift, UnexpectedReply
 from alexia_api.domain.ids import parse_message_id
-from alexia_api.domain.messages import MessageSummary
-from alexia_api.portal.folders import select_folder
+from alexia_api.domain.messages import FolderName, MessageSummary
+from alexia_api.portal.gateway import Gateway
 from alexia_api.portal.grid import GridRow, cell_text
 from alexia_api.portal.inbox import (
     GRID_ID,
@@ -291,6 +291,10 @@ def seeded(username: str, folder: str) -> tuple[MessageSummary, ...]:
     return tuple(summary_of(message) for message in held)
 
 
+async def feed_of(gateway: Gateway, folder: FolderName = "received", **limits: int) -> Feed:
+    return await gateway.call(lambda tx: read_feed(tx, folder, **limits))
+
+
 def feed_queries(harness: Harness) -> list[dict[str, str]]:
     return [
         {name: values[0] for name, values in parse_qs(request.query).items()}
@@ -308,7 +312,7 @@ async def test_reads_the_received_messages_of_each_family_newest_first(
 ) -> None:
     gateway = harness.gateway(credentials=harness.credentials(username, password))
 
-    feed = await gateway.call(read_feed)
+    feed = await feed_of(gateway)
 
     expected = seeded(username, "received")
     assert feed == Feed(records=len(expected), rows=expected, truncated=False)
@@ -317,14 +321,17 @@ async def test_reads_the_received_messages_of_each_family_newest_first(
     assert any(row.read is True for row in expected)
 
 
-async def test_reads_the_sent_folder_once_the_portal_shows_it(harness: Harness) -> None:
+async def test_reads_the_folder_it_is_asked_for_whichever_one_the_portal_showed_before(
+    harness: Harness,
+) -> None:
     gateway = harness.gateway()
+    asked: tuple[FolderName, ...] = ("sent", "received", "received", "sent")
 
-    await gateway.call(lambda tx: select_folder(tx, "sent"))
-    feed = await gateway.call(read_feed)
+    for folder in asked:
+        feed = await feed_of(gateway, folder)
+        assert feed.rows == seeded("marta.ejemplo", folder)
 
-    assert feed.rows == seeded("marta.ejemplo", "sent")
-    assert 0 < len(feed.rows) < len(seeded("marta.ejemplo", "received"))
+    assert 0 < len(seeded("marta.ejemplo", "sent")) < len(seeded("marta.ejemplo", "received"))
 
 
 async def test_a_small_page_size_reads_every_page_and_lists_every_message_once(
@@ -332,7 +339,7 @@ async def test_a_small_page_size_reads_every_page_and_lists_every_message_once(
 ) -> None:
     gateway = harness.gateway()
 
-    feed = await gateway.call(lambda tx: read_feed(tx, page_size=3))
+    feed = await feed_of(gateway, page_size=3)
 
     assert feed.rows == seeded("marta.ejemplo", "received")
     queries = feed_queries(harness)
@@ -343,7 +350,7 @@ async def test_a_small_page_size_reads_every_page_and_lists_every_message_once(
 async def test_pages_past_the_limit_are_left_unread_and_the_feed_says_so(harness: Harness) -> None:
     gateway = harness.gateway()
 
-    feed = await gateway.call(lambda tx: read_feed(tx, page_size=3, max_pages=2))
+    feed = await feed_of(gateway, page_size=3, max_pages=2)
 
     everything = seeded("marta.ejemplo", "received")
     assert feed.rows == everything[:6]
@@ -355,7 +362,7 @@ async def test_pages_past_the_limit_are_left_unread_and_the_feed_says_so(harness
 async def test_a_limit_that_fits_every_page_is_not_truncated(harness: Harness) -> None:
     gateway = harness.gateway()
 
-    feed = await gateway.call(lambda tx: read_feed(tx, page_size=3, max_pages=3))
+    feed = await feed_of(gateway, page_size=3, max_pages=3)
 
     assert len(feed.rows) == feed.records
     assert not feed.truncated
@@ -366,14 +373,14 @@ async def test_a_folder_with_no_messages_costs_one_request(harness: Harness) -> 
     families = tuple(replace(family, messages=()) for family in world.families)
     harness.sim.world = replace(world, families=families)
 
-    feed = await harness.gateway().call(read_feed)
+    feed = await feed_of(harness.gateway())
 
     assert feed == Feed(records=0, rows=(), truncated=False)
     assert len(feed_queries(harness)) == 1
 
 
 async def test_the_request_carries_what_the_portals_own_page_sends(harness: Harness) -> None:
-    await harness.gateway().call(read_feed)
+    await feed_of(harness.gateway())
 
     (query,) = feed_queries(harness)
     assert query["jqGridID"] == GRID_ID
@@ -425,7 +432,7 @@ async def test_a_row_with_the_wrong_number_of_cells_is_schema_drift(
 ) -> None:
     harness.sim.options.feed_cell_count = 10
 
-    detail = await failure(harness.gateway().call(read_feed))
+    detail = await failure(feed_of(harness.gateway()))
 
     assert isinstance(detail, SchemaDrift)
     assert detail.where == "feed row 0: 10 cells instead of 11"
@@ -435,10 +442,10 @@ async def test_a_session_that_ended_is_replaced_and_the_reader_never_notices(
     harness: Harness,
 ) -> None:
     gateway = harness.gateway()
-    await gateway.call(read_feed)
+    await feed_of(gateway, "sent")
 
     harness.sim.expire_all_sessions()
-    feed = await gateway.call(read_feed)
+    feed = await feed_of(gateway, "sent")
 
-    assert feed.rows == seeded("marta.ejemplo", "received")
+    assert feed.rows == seeded("marta.ejemplo", "sent")
     assert harness.sim.counters.login_attempts == 2

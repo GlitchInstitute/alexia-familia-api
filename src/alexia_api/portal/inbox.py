@@ -9,8 +9,9 @@ from selectolax.lexbor import LexborHTMLParser
 
 from alexia_api.domain.errors import PortalError, SchemaDrift, sample_of
 from alexia_api.domain.ids import InvalidIdError, MessageId, parse_message_id
-from alexia_api.domain.messages import MessageSummary
+from alexia_api.domain.messages import FolderName, MessageSummary
 from alexia_api.domain.time import portal_list_date
+from alexia_api.portal.folders import select_folder
 from alexia_api.portal.grid import GridRow, cell_text, is_empty_cell, parse_grid_json
 from alexia_api.portal.pages import COMUNICADOS_PAGE, FEED_ACCEPT, PageRequest, get_page
 from alexia_api.portal.session import Tx
@@ -34,7 +35,7 @@ class FeedPage:
 
 @dataclass(frozen=True, slots=True)
 class Feed:
-    """Every message of the folder the portal shows, newest first."""
+    """Every message of one folder, newest first."""
 
     records: int
     rows: tuple[MessageSummary, ...]
@@ -137,9 +138,17 @@ async def read_feed_page(tx: Tx, *, rows: int, page: int) -> FeedPage:
 
 
 async def read_feed(
-    tx: Tx, *, page_size: int = DEFAULT_PAGE_SIZE, max_pages: int = MAX_PAGES
+    tx: Tx,
+    folder: FolderName,
+    *,
+    page_size: int = DEFAULT_PAGE_SIZE,
+    max_pages: int = MAX_PAGES,
 ) -> Feed:
-    """Read every page of the folder the portal shows. Pages past `max_pages` are left unread."""
+    """Read every page of a folder. Pages past `max_pages` are left unread.
+
+    The portal lists whichever folder its session shows, so the folder is chosen first.
+    """
+    await select_folder(tx, folder)
     first = await read_feed_page(tx, rows=page_size, page=1)
     rows = list(first.rows)
     for page in range(2, min(first.pages, max_pages) + 1):
