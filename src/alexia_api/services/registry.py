@@ -6,7 +6,7 @@ reach a student id that the portal did not list for that login, whatever id the 
 
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
-from typing import Self
+from typing import Final, Self
 
 import httpx
 
@@ -20,9 +20,10 @@ from alexia_api.domain.ids import (
     InvalidIdError,
     StudentId,
     parse_account_id,
+    parse_message_id,
     parse_role_id,
 )
-from alexia_api.domain.messages import Folder, FolderName
+from alexia_api.domain.messages import Folder, FolderName, Message
 from alexia_api.domain.security import Principal
 from alexia_api.portal.breaker import BREAKER_DIRECTORY, BreakerStore
 from alexia_api.portal.children import read_home
@@ -30,13 +31,18 @@ from alexia_api.portal.folders import read_folder_tree
 from alexia_api.portal.gateway import CheckResult, Gateway
 from alexia_api.portal.inbox import Feed, read_feed
 from alexia_api.portal.login import PortalCredentials
+from alexia_api.portal.message import read_message
 from alexia_api.portal.roster import read_roster
 from alexia_api.portal.session import Gates, PortalSession
 from alexia_api.portal.tracking import read_tracking
-from alexia_api.services.cache import Cached, TtlCache
+from alexia_api.services.cache import Cached, TtlCache, combine
 from alexia_api.services.errors import NotFoundError
 
 type TransportFactory = Callable[[AccountSettings], httpx.AsyncBaseTransport | None]
+
+MAX_CACHED_MESSAGES: Final = 32
+"""How many messages with their words an account keeps. A message with pictures can take several
+mebibytes, so these are kept apart from the lists, which a long run of reads must not push out."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -57,6 +63,7 @@ class AccountRuntime:
         settings: AccountSettings,
         gateway: Gateway,
         cache: TtlCache,
+        message_cache: TtlCache,
         ttls: CacheTtls,
         capabilities: Capabilities,
     ) -> None:
@@ -66,6 +73,7 @@ class AccountRuntime:
         self._pins: Mapping[StudentId, ChildSlug] = settings.pinned_slugs()
         self._gateway = gateway
         self._cache = cache
+        self._message_cache = message_cache
         self._ttls = ttls
         self._capabilities = capabilities
 
@@ -136,6 +144,33 @@ class AccountRuntime:
             fresh=fresh,
         )
 
+    async def message(
+        self, folder: FolderName, reference: str, *, fresh: bool = False
+    ) -> Cached[Message]:
+        """One message of a folder, with its words.
+
+        The message is found in the stored list of its folder. A reference that is no message id,
+        or that the portal did not list for this login, is therefore not found without a request
+        to the portal. A client that expects a message that arrived lately reads with `fresh`.
+        The row comes from the list as it is now and the words come from a store of their own, so
+        `read` agrees with the list even when the words are older.
+        """
+        try:
+            wanted = parse_message_id(reference)
+        except InvalidIdError:
+            raise NotFoundError("message", reference) from None
+        listing = await self.messages(folder, fresh=fresh)
+        row = next((summary for summary in listing.value.messages if summary.id == wanted), None)
+        if row is None:
+            raise NotFoundError("message", reference)
+        content = await self._message_cache.get(
+            ("message", row.id),
+            self._ttls.message,
+            lambda: self._gateway.call(lambda tx: read_message(tx, row)),
+            fresh=fresh,
+        )
+        return combine(Message.of(row, content.value), listing, content)
+
     async def check(self, *, fresh: bool = False) -> CheckResult:
         """Make sure a session works, logging in if needed. This is the one call that logs in."""
         return await self._gateway.check(fresh=fresh)
@@ -187,6 +222,7 @@ class Registry:
                 gates=gates,
                 transport=transport_for(account) if transport_for else None,
                 clock=clock,
+                zone=settings.tzinfo,
                 min_spacing=settings.min_spacing_seconds,
                 timeout=settings.request_timeout_seconds,
             )
@@ -206,6 +242,7 @@ class Registry:
                     settings=account,
                     gateway=gateway,
                     cache=TtlCache(clock),
+                    message_cache=TtlCache(clock, max_entries=MAX_CACHED_MESSAGES),
                     ttls=settings.cache,
                     capabilities=settings.capabilities,
                 )

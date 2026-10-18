@@ -7,7 +7,7 @@ import logging
 import pytest
 
 from alexia_api.clock import ManualClock
-from alexia_api.services.cache import TtlCache
+from alexia_api.services.cache import Cached, CacheStatus, TtlCache, combine
 
 KEY = ("children",)
 
@@ -238,3 +238,34 @@ async def test_clearing_drops_everything(clock: ManualClock) -> None:
     cache.clear()
 
     assert (await cache.get(KEY, 60, source)).status == "miss"
+
+
+@pytest.mark.parametrize(
+    ("statuses", "expected"),
+    [
+        (("hit",), "hit"),
+        (("hit", "hit"), "hit"),
+        (("hit", "miss"), "miss"),
+        (("miss", "hit"), "miss"),
+        (("miss", "miss"), "miss"),
+        (("hit", "hit", "miss"), "miss"),
+        (("bypass", "bypass"), "bypass"),
+        (("bypass", "hit"), "bypass"),
+        (("hit", "bypass"), "bypass"),
+        (("miss", "bypass"), "bypass"),
+    ],
+)
+def test_an_answer_made_of_stored_answers_is_a_hit_only_when_every_part_was_stored(
+    statuses: tuple[CacheStatus, ...], expected: CacheStatus
+) -> None:
+    parts = [Cached(object(), status, 0.0) for status in statuses]
+
+    joined = combine("answer", *parts)
+
+    assert (joined.value, joined.status) == ("answer", expected)
+
+
+def test_an_answer_made_of_stored_answers_is_as_old_as_the_oldest_part() -> None:
+    parts = [Cached(object(), "hit", age) for age in (12.0, 300.0, 0.0)]
+
+    assert combine("answer", *parts).age == 300.0

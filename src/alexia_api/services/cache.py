@@ -29,6 +29,23 @@ class Cached[T]:
     age: float
 
 
+def combine[T](value: T, first: Cached[object], *rest: Cached[object]) -> Cached[T]:
+    """Describe an answer built from several stored answers, as one.
+
+    It is a hit only when every part was stored. A part that was forced makes it a bypass, and
+    any other part that was read for it makes it a miss. It is as old as its oldest part.
+    """
+    parts = (first, *rest)
+    statuses = {part.status for part in parts}
+    if "bypass" in statuses:
+        status: CacheStatus = "bypass"
+    elif "miss" in statuses:
+        status = "miss"
+    else:
+        status = "hit"
+    return Cached(value, status, max(part.age for part in parts))
+
+
 @dataclass(frozen=True, slots=True)
 class _Entry:
     value: object

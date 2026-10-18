@@ -1,5 +1,6 @@
 """The registry gives each account its own gateway and cache, and finds children through them."""
 
+import asyncio
 from datetime import timedelta
 
 import pytest
@@ -10,17 +11,21 @@ from alexia_api.domain.accounts import Blocked, Capabilities, LoggedIn, LoggedOu
 from alexia_api.domain.children import TrackingCounters
 from alexia_api.domain.errors import BreakerOpen, InvalidCredentials
 from alexia_api.domain.ids import parse_account_id
+from alexia_api.domain.messages import FolderName, Message, MessageSummary
 from alexia_api.domain.security import Principal
 from alexia_api.portal.breaker import BreakerStore
 from alexia_api.portal.inbox import Feed
 from alexia_api.services.errors import NotFoundError
 from alexia_api.services.registry import Directory, Registry
-from alexia_api.sim.world import DEMO_PASSWORD_B, DEMO_USER_B, synthetic_guid
+from alexia_api.sim.world import DEMO_PASSWORD_B, DEMO_USER_A, DEMO_USER_B, synthetic_guid
 from tests.harness import A_NEW_MESSAGE, Failure, Harness
 
 LUCIA = synthetic_guid(0x101)
 MATEO = synthetic_guid(0x102)
 HUGO = synthetic_guid(0x111)
+UNREAD = synthetic_guid(0x1001)
+WITH_FILE = synthetic_guid(0x1002)
+MESSAGE_DATA = "GetDatosPaginaComunicado"
 
 
 async def test_accounts_are_kept_in_the_order_they_were_configured(harness: Harness) -> None:
@@ -300,6 +305,7 @@ async def test_every_kind_of_answer_is_kept_under_a_key_of_its_own(harness: Harn
             (await runtime.folders()).value,
             (await runtime.messages("received")).value,
             (await runtime.messages("sent")).value,
+            (await runtime.message("received", WITH_FILE)).value,
             (await runtime.tracking(lucia)).value,
             (await runtime.staff(lucia)).value,
         ]
@@ -312,6 +318,7 @@ async def test_every_kind_of_answer_is_kept_under_a_key_of_its_own(harness: Harn
         tuple,
         Feed,
         Feed,
+        Message,
         TrackingCounters,
         tuple,
     ]
@@ -357,6 +364,193 @@ async def test_a_fresh_look_sees_a_message_that_arrived_since(harness: Harness) 
     assert fresh.status == "bypass"
     assert len(fresh.value.messages) == len(before.value.messages) + 1
     assert fresh.value.messages[0].subject == "Nuevo aviso"
+
+
+async def test_a_message_is_its_row_in_the_list_joined_to_its_words(harness: Harness) -> None:
+    runtime = harness.registry().get("marta")
+    listing = await runtime.messages("received")
+    row = next(item for item in listing.value.messages if item.id == WITH_FILE)
+
+    found = (await runtime.message("received", WITH_FILE)).value
+
+    assert found.model_dump(include=set(MessageSummary.model_fields)) == row.model_dump()
+    assert found.sent_at.isoformat() == "2026-10-14T17:40:00+02:00"
+    assert found.body.text.startswith("Adjuntamos la autorización")
+    assert [attachment.name for attachment in found.attachments] == ["Autorización museo.pdf"]
+
+
+async def test_a_message_is_found_by_its_id_in_any_letter_case(harness: Harness) -> None:
+    runtime = harness.registry().get("marta")
+
+    found = await runtime.message("received", WITH_FILE.upper())
+
+    assert found.value.id == WITH_FILE
+
+
+async def test_a_message_the_family_sent_is_read_from_the_sent_folder(harness: Harness) -> None:
+    runtime = harness.registry().get("marta")
+
+    found = await runtime.message("sent", synthetic_guid(0x2001))
+
+    assert found.value.subject == "Ausencia de Lucía"
+    assert found.value.body.text.startswith("Ausencia de Lucía.")
+
+
+async def test_a_message_is_stored_after_it_is_read_and_read_again_when_its_time_is_up(
+    harness: Harness, clock: ManualClock
+) -> None:
+    settings = harness.settings(cache=CacheTtls(messages=100_000, message=60))
+    runtime = harness.registry(settings).get("marta")
+    first = await runtime.message("received", UNREAD)
+    reads = harness.requests_to(MESSAGE_DATA)
+
+    clock.advance(59)
+    second = await runtime.message("received", UNREAD)
+    clock.advance(1)
+    third = await runtime.message("received", UNREAD)
+
+    assert [answer.status for answer in (first, second, third)] == ["miss", "hit", "miss"]
+    assert 59 <= second.age < 60
+    assert harness.requests_to(MESSAGE_DATA) == reads + 1
+
+
+async def test_a_time_to_live_of_zero_turns_the_store_of_messages_off(harness: Harness) -> None:
+    runtime = harness.registry(harness.settings(cache=CacheTtls(message=0))).get("marta")
+
+    await runtime.message("received", UNREAD)
+    await runtime.message("received", UNREAD)
+
+    assert harness.requests_to(MESSAGE_DATA) == 2
+
+
+@pytest.mark.parametrize(
+    "reference",
+    ["", "message", "5afe0000-0000-4000-8000-00000000100", f"{UNREAD}0", f" {UNREAD}"],
+)
+async def test_what_is_no_message_id_is_not_found_without_asking_the_portal(
+    harness: Harness, reference: str
+) -> None:
+    runtime = harness.registry().get("marta")
+
+    with pytest.raises(NotFoundError) as raised:
+        await runtime.message("received", reference)
+
+    assert (raised.value.kind, raised.value.reference) == ("message", reference)
+    assert len(harness.sim.requests) == 0
+
+
+async def test_a_message_the_list_does_not_hold_is_not_found_and_its_page_is_never_opened(
+    harness: Harness,
+) -> None:
+    runtime = harness.registry().get("marta")
+    unknown = synthetic_guid(0x9999)
+
+    with pytest.raises(NotFoundError) as raised:
+        await runtime.message("received", unknown)
+
+    assert (raised.value.kind, raised.value.reference) == ("message", unknown)
+    assert harness.requests_to("Comunicado.aspx") == 0
+    assert harness.requests_to(MESSAGE_DATA) == 0
+
+
+@pytest.mark.parametrize(("folder", "number"), [("sent", 0x1001), ("received", 0x2001)])
+async def test_a_message_is_found_only_in_the_folder_it_is_in(
+    harness: Harness, folder: FolderName, number: int
+) -> None:
+    runtime = harness.registry().get("marta")
+
+    with pytest.raises(NotFoundError):
+        await runtime.message(folder, synthetic_guid(number))
+
+    assert harness.requests_to(MESSAGE_DATA) == 0
+
+
+async def test_an_account_cannot_read_a_message_of_another_account(harness: Harness) -> None:
+    registry = harness.registry()
+    theirs = synthetic_guid(0x1101)
+
+    assert (await registry.get("pablo").message("received", theirs)).value.id == theirs
+    with pytest.raises(NotFoundError):
+        await registry.get("marta").message("received", theirs)
+
+
+async def test_a_fresh_look_reads_the_list_and_the_words_again(harness: Harness) -> None:
+    runtime = harness.registry().get("marta")
+    await runtime.message("received", UNREAD)
+    lists, pages = harness.requests_to("Comunicados.aspx"), harness.requests_to(MESSAGE_DATA)
+
+    again = await runtime.message("received", UNREAD, fresh=True)
+
+    assert again.status == "bypass"
+    assert harness.requests_to("Comunicados.aspx") > lists
+    assert harness.requests_to(MESSAGE_DATA) == pages + 1
+
+
+async def test_a_message_that_arrived_since_is_found_only_after_a_fresh_look(
+    harness: Harness,
+) -> None:
+    runtime = harness.registry().get("marta")
+    await runtime.messages("received")
+    harness.deliver(DEMO_USER_A, A_NEW_MESSAGE)
+
+    with pytest.raises(NotFoundError):
+        await runtime.message("received", A_NEW_MESSAGE.guid)
+    found = await runtime.message("received", A_NEW_MESSAGE.guid, fresh=True)
+
+    assert found.value.subject == "Nuevo aviso"
+
+
+async def test_the_row_is_the_list_as_it_is_now_even_when_the_words_are_older(
+    harness: Harness, clock: ManualClock
+) -> None:
+    runtime = harness.registry().get("marta")
+    first = await runtime.message("received", UNREAD)
+    reads = harness.requests_to(MESSAGE_DATA)
+    harness.revise(DEMO_USER_A, UNREAD, read=True)
+    clock.advance(121)
+
+    second = await runtime.message("received", UNREAD)
+
+    assert (first.value.read, second.value.read) == (False, True)
+    assert second.value.body == first.value.body
+    assert second.status == "miss"
+    assert harness.requests_to(MESSAGE_DATA) == reads
+
+
+async def test_an_account_keeps_the_words_of_only_the_latest_messages_it_read(
+    harness: Harness, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("alexia_api.services.registry.MAX_CACHED_MESSAGES", 2)
+    runtime = harness.registry().get("marta")
+    ids = [synthetic_guid(number) for number in (0x1001, 0x1002, 0x1003)]
+    for guid in ids:
+        await runtime.message("received", guid)
+
+    statuses = [(await runtime.message("received", guid)).status for guid in reversed(ids)]
+
+    assert statuses == ["hit", "hit", "miss"]
+
+
+async def test_many_requests_for_one_message_share_one_read(harness: Harness) -> None:
+    runtime = harness.registry().get("marta")
+
+    answers = await asyncio.gather(*(runtime.message("received", UNREAD) for _ in range(8)))
+
+    assert {answer.status for answer in answers} == {"miss"}
+    assert harness.requests_to(MESSAGE_DATA) == 1
+
+
+@pytest.mark.parametrize(
+    ("zone", "offset"), [("Europe/Madrid", "+02:00"), ("Asia/Tokyo", "+09:00")]
+)
+async def test_the_time_a_message_was_sent_is_wall_time_in_the_school_zone(
+    harness: Harness, zone: str, offset: str
+) -> None:
+    runtime = harness.registry(harness.settings(timezone=zone)).get("marta")
+
+    found = await runtime.message("received", WITH_FILE)
+
+    assert found.value.sent_at.isoformat() == f"2026-10-14T17:40:00{offset}"
 
 
 async def test_a_blocked_account_does_not_stop_the_other_account(

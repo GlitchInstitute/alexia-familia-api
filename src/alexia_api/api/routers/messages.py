@@ -2,12 +2,12 @@
 
 from typing import Annotated, Final
 
-from fastapi import APIRouter, Query, Response
+from fastapi import APIRouter, Path, Query, Response
 
 from alexia_api.api.errors import problem_responses
 from alexia_api.api.params import CACHE_HEADERS, FreshQuery, ReadAccount, stamp
 from alexia_api.api.schemas import FolderList, MessagePage
-from alexia_api.domain.messages import FolderName, MessageSummary
+from alexia_api.domain.messages import FolderName, Message, MessageSummary
 
 DEFAULT_LIMIT: Final = 25
 MAX_LIMIT: Final = 100
@@ -32,6 +32,18 @@ LimitQuery = Annotated[
     int, Query(ge=1, le=MAX_LIMIT, description="The most messages to return in one page.")
 ]
 OffsetQuery = Annotated[int, Query(ge=0, description="How many matching messages to skip.")]
+MessageFolderQuery = Annotated[
+    FolderName,
+    Query(description="The folder the message is in. A message the family sent is in `sent`."),
+]
+MessagePath = Annotated[
+    str,
+    Path(
+        description=(
+            "The message's id, as the list of messages shows it. Letter case does not matter."
+        )
+    ),
+]
 
 
 def _matching(
@@ -94,3 +106,30 @@ async def list_messages(
         next_offset=after if after < len(matching) else None,
         truncated=listing.value.truncated,
     )
+
+
+@router.get(
+    "/messages/{message}",
+    summary="Read one message",
+    description=(
+        "Needs the `read` scope. Gives the message as the list shows it, together with when the "
+        "school sent it, its words, the addresses in them, and its files. The message must be in "
+        "the list of the folder you name, so a message the family sent needs `folder=sent`. "
+        "`body.html` is safe to show, and `body.text` holds the same words as plain text. The "
+        "server stores a message after it reads it, so asking again is cheap. `fresh=true` reads "
+        "the message again, and the list of its folder too. Opening a message in the portal may "
+        "mark it as read there, and this server cannot tell whether it does. The `read` field "
+        "comes from the list, so it shows the state from before the message was opened."
+    ),
+    responses=CACHE_HEADERS,
+)
+async def get_message(
+    account: ReadAccount,
+    message: MessagePath,
+    response: Response,
+    folder: MessageFolderQuery = "received",
+    fresh: FreshQuery = False,
+) -> Message:
+    found = await account.message(folder, message, fresh=fresh)
+    stamp(response, found)
+    return found.value

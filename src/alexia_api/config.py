@@ -213,6 +213,11 @@ class CacheTtls(Model):
     messages: float = Field(
         default=120, ge=0, description="Seconds to reuse the list of messages in a folder."
     )
+    message: float = Field(
+        default=900,
+        ge=0,
+        description="Seconds to reuse one message with its words, after it was read.",
+    )
 
 
 def _split_list(value: object) -> object:

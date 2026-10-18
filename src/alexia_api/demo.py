@@ -31,6 +31,7 @@ from alexia_api.sim.world import (
     DEMO_USER_A,
     DEMO_USER_B,
     SIM_INSTITUTION_KEY,
+    synthetic_guid,
 )
 
 DEMO_KEY_NAME: Final = "demo"
@@ -50,6 +51,10 @@ TOUR: Final = (
     ("/v1/accounts/marta/children/lucia/tracking", "what the school tracks for one child"),
     ("/v1/accounts/marta/folders", "the message folders of one account"),
     ("/v1/accounts/marta/messages?limit=5", "the five newest messages"),
+    (
+        f"/v1/accounts/marta/messages/{synthetic_guid(0x1002)}",
+        "one message, with its words, its links and its files",
+    ),
 )
 """Requests the demo suggests, as a path and a few words about it. A test asks for each one."""
 

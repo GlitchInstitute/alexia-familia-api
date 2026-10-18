@@ -28,25 +28,13 @@ from alexia_api.portal.message import message_path, open_message, read_message
 from alexia_api.portal.session import Tx
 from alexia_api.portal.ws import call_ws
 from alexia_api.sim.app import MESSAGE_PATH, MESSAGES_PATH
-from alexia_api.sim.mail import SimFile, SimMessage, SimTranslation
-from alexia_api.sim.world import (
-    DEMO_PASSWORD_B,
-    DEMO_USER_A,
-    DEMO_USER_B,
-    default_world,
-    synthetic_guid,
-)
-from tests.harness import Failure, Harness
+from alexia_api.sim.mail import SimFile, SimTranslation
+from alexia_api.sim.world import DEMO_PASSWORD_B, DEMO_USER_A, DEMO_USER_B, synthetic_guid
+from tests.harness import Failure, Harness, seeded
 
 MADRID = ZoneInfo("Europe/Madrid")
 DATA_PATH = "/ACWeb/WS_Data/WSComunicados.asmx/GetDatosPaginaComunicado"
 DRIFT_WHERE = "ws:WSComunicados.GetDatosPaginaComunicado reply"
-
-
-def seeded(number: int) -> SimMessage:
-    family = default_world().family_for(DEMO_USER_A)
-    assert family is not None
-    return next(message for message in family.messages if message.guid == synthetic_guid(number))
 
 
 async def summary_of(
@@ -379,6 +367,24 @@ async def test_the_data_call_must_come_from_the_page_of_the_open_message(
         )
 
     detail = await failure(gateway.call(from_the_list))
+
+    assert detail == WsRejected(call="WSComunicados.GetDatosPaginaComunicado", status=500)
+
+
+async def test_a_message_the_school_takes_back_after_its_page_opened_is_a_rejected_call(
+    harness: Harness, failure: Failure
+) -> None:
+    gateway = harness.gateway()
+    row = await summary_of(gateway, 0x1001)
+
+    async def taken_back(tx: Tx) -> object:
+        await open_message(tx, row.id)
+        harness.withdraw(DEMO_USER_A, row.id)
+        return await call_ws(
+            tx, GET_MESSAGE_DATA, wire.EmptyParams(), referer=tx.absolute(message_path(row.id))
+        )
+
+    detail = await failure(gateway.call(taken_back))
 
     assert detail == WsRejected(call="WSComunicados.GetDatosPaginaComunicado", status=500)
 

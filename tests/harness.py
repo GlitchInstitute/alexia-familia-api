@@ -50,6 +50,13 @@ A_NEW_MESSAGE = replace(
 )
 
 
+def seeded(number: int, username: str = DEMO_USER_A) -> SimMessage:
+    """A message that the simulator's world holds for a family from the start."""
+    family = default_world().family_for(username)
+    assert family is not None
+    return next(message for message in family.messages if message.guid == synthetic_guid(number))
+
+
 async def failure_of(awaitable: Awaitable[object]) -> PortalErrorDetail:
     """Await something that must fail with a `PortalError` and hand back its typed reason."""
     with pytest.raises(PortalError) as raised:
@@ -155,6 +162,34 @@ class Harness:
         world = self.sim.world
         families = tuple(
             replace(family, children=(*family.children, child))
+            if family.username == username
+            else family
+            for family in world.families
+        )
+        self.sim.world = replace(world, families=families)
+
+    def revise(self, username: str, guid: str, **changes: Any) -> None:
+        """The school changes a message it sent. A session that is already open sees it next."""
+        world = self.sim.world
+        families = tuple(
+            replace(
+                family,
+                messages=tuple(
+                    replace(message, **changes) if message.guid == guid else message
+                    for message in family.messages
+                ),
+            )
+            if family.username == username
+            else family
+            for family in world.families
+        )
+        self.sim.world = replace(world, families=families)
+
+    def withdraw(self, username: str, guid: str) -> None:
+        """The school takes back a message it sent. A session that is already open sees it next."""
+        world = self.sim.world
+        families = tuple(
+            replace(family, messages=tuple(m for m in family.messages if m.guid != guid))
             if family.username == username
             else family
             for family in world.families

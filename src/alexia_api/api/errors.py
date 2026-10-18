@@ -256,13 +256,23 @@ async def _api_error(request: Request, error: ApiError) -> Response:
 
 async def _not_found(request: Request, error: NotFoundError) -> Response:
     reference = _shown(error.reference)
-    if error.kind == "account":
-        detail = f"no account named '{reference}' is available to this key"
-    else:
-        detail = (
-            f"no child '{reference}' on this account, use a student id or a name from the list of "
-            "children, and ask for that list with fresh=true if a sibling was added lately"
-        )
+    match error.kind:
+        case "account":
+            detail = f"no account named '{reference}' is available to this key"
+        case "child":
+            detail = (
+                f"no child '{reference}' on this account, use a student id or a name from the "
+                "list of children, and ask for that list with fresh=true if a sibling was added "
+                "lately"
+            )
+        case "message":
+            detail = (
+                f"no message '{reference}' in this folder, use an id from the list of messages of "
+                "the same folder, and ask for that list with fresh=true if the message arrived "
+                "lately"
+            )
+        case _:
+            assert_never(error.kind)
     return problem_response(request, HTTPStatus.NOT_FOUND, f"{error.kind}_not_found", detail)
 
 

@@ -1,6 +1,7 @@
 import pytest
 
 from alexia_api.services.keys import FILE_NAME
+from alexia_api.sim.world import synthetic_guid
 from tests.api.support import Api, MakeApi, bearer, problem_of
 
 ACCOUNT_DATA_ROUTES = (
@@ -10,6 +11,7 @@ ACCOUNT_DATA_ROUTES = (
     "/v1/accounts/marta/children/lucia/staff",
     "/v1/accounts/marta/folders",
     "/v1/accounts/marta/messages",
+    f"/v1/accounts/marta/messages/{synthetic_guid(0x1001)}",
 )
 
 

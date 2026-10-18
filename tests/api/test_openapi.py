@@ -67,6 +67,7 @@ async def test_the_operation_ids_read_well_in_a_generated_client(api: Api) -> No
         "check_connection",
         "list_folders",
         "list_messages",
+        "get_message",
     } <= ids
 
 
@@ -131,6 +132,7 @@ async def test_cached_reads_document_their_cache_headers(api: Api) -> None:
         "/v1/accounts/{account}/children/{child}/staff",
         "/v1/accounts/{account}/folders",
         "/v1/accounts/{account}/messages",
+        "/v1/accounts/{account}/messages/{message}",
     ):
         headers = paths[path]["get"]["responses"]["200"]["headers"]
         assert set(headers) == {"X-Cache", "Age"}, path
@@ -149,6 +151,15 @@ async def test_the_message_list_documents_its_folders_and_its_page_limits(api: A
     assert parameters["folder"]["enum"] == ["received", "sent"]
     assert (parameters["limit"]["minimum"], parameters["limit"]["maximum"]) == (1, 100)
     assert parameters["offset"]["minimum"] == 0
+
+
+async def test_the_message_route_documents_its_folder_and_what_opening_may_do(api: Api) -> None:
+    operation = (await schema_of(api))["paths"]["/v1/accounts/{account}/messages/{message}"]["get"]
+    parameters = {parameter["name"]: parameter for parameter in operation["parameters"]}
+
+    assert parameters["folder"]["schema"]["enum"] == ["received", "sent"]
+    assert parameters["message"]["in"] == "path"
+    assert "may mark it as read" in operation["description"]
 
 
 async def test_the_problem_schema_lists_what_a_client_can_rely_on(api: Api) -> None:
