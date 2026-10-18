@@ -1,5 +1,6 @@
 """Shared fixtures. They build a simulated portal and gateways that talk to it in process."""
 
+import os
 from collections.abc import AsyncIterator
 from pathlib import Path
 
@@ -9,6 +10,13 @@ from alexia_api.clock import ManualClock
 from alexia_api.sim.app import PortalSim
 from alexia_api.sim.world import default_world
 from tests.harness import Failure, Harness, failure_of
+
+
+@pytest.fixture(autouse=True)
+def _no_settings_from_the_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep the developer's own ALEXIA_API_* variables out of every test."""
+    for name in [name for name in os.environ if name.startswith("ALEXIA_API_")]:
+        monkeypatch.delenv(name)
 
 
 @pytest.fixture
