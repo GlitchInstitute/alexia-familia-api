@@ -1,5 +1,6 @@
 """The application factory."""
 
+import logging
 import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -21,6 +22,8 @@ from alexia_api.config import Settings, find_config_file, load_settings
 from alexia_api.services.keys import FILE_NAME, ApiKeyStore
 from alexia_api.services.ratelimit import RateLimiter
 from alexia_api.services.registry import Registry
+
+log = logging.getLogger("alexia_api.server")
 
 DOCUMENTATION_PATHS: Final = ("/docs", "/redoc", "/docs/oauth2-redirect")
 
@@ -50,6 +53,16 @@ TAGS: Final = [
 
 def _operation_id(route: APIRoute) -> str:
     return route.name
+
+
+def _startup_line(settings: Settings, registry: Registry) -> str:
+    accounts = ", ".join(runtime.account for runtime in registry.accounts) or "none"
+    writes = "on" if settings.allow_writes else "off"
+    documentation = "on" if settings.docs_enabled else "off"
+    return (
+        f"alexia-familia-api {__version__} is up, accounts {accounts}, "
+        f"writes {writes}, documentation {documentation}"
+    )
 
 
 def create_app(
@@ -82,6 +95,7 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+        log.info(_startup_line(settings, services.registry))
         try:
             yield
         finally:

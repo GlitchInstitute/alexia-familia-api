@@ -1,10 +1,12 @@
 import asyncio
+import logging
 from pathlib import Path
 
 import httpx
 import pytest
 from starlette.types import ASGIApp, Message, Scope
 
+from alexia_api import __version__
 from alexia_api.api.app import create_app
 from alexia_api.config import ConfigError
 from alexia_api.services.keys import FILE_NAME, ApiKeyStore
@@ -186,3 +188,53 @@ async def test_only_listed_hosts_are_served(make_api: MakeApi) -> None:
 async def test_any_host_is_served_when_none_are_listed(api: Api) -> None:
     response = await api.client.get("/healthz", headers={"Host": "anything.test"})
     assert response.status_code == 200
+
+
+def started_line(caplog: pytest.LogCaptureFixture) -> str:
+    [line] = [r.getMessage() for r in caplog.records if r.name == "alexia_api.server"]
+    return line
+
+
+async def test_the_server_says_who_it_serves_when_it_starts(
+    api: Api, caplog: pytest.LogCaptureFixture
+) -> None:
+    with caplog.at_level(logging.INFO, logger="alexia_api"):
+        await run_lifespan(api.app)
+
+    assert started_line(caplog) == (
+        f"alexia-familia-api {__version__} is up, accounts marta, pablo, "
+        "writes off, documentation on"
+    )
+
+
+async def test_the_start_line_shows_when_writes_are_on_and_documentation_is_off(
+    make_api: MakeApi, caplog: pytest.LogCaptureFixture
+) -> None:
+    api = await make_api(allow_writes=True, docs_enabled=False)
+
+    with caplog.at_level(logging.INFO, logger="alexia_api"):
+        await run_lifespan(api.app)
+
+    assert started_line(caplog).endswith("writes on, documentation off")
+
+
+async def test_the_start_line_says_so_when_there_are_no_accounts(
+    make_api: MakeApi, caplog: pytest.LogCaptureFixture
+) -> None:
+    api = await make_api(accounts={})
+
+    with caplog.at_level(logging.INFO, logger="alexia_api"):
+        await run_lifespan(api.app)
+
+    assert "accounts none," in started_line(caplog)
+
+
+async def test_the_start_line_holds_no_portal_address_and_no_secret(
+    api: Api, caplog: pytest.LogCaptureFixture
+) -> None:
+    with caplog.at_level(logging.DEBUG, logger="alexia_api"):
+        await run_lifespan(api.app)
+
+    text = " ".join(record.getMessage() for record in caplog.records)
+    assert "sim.invalid" not in text
+    assert "demo-password" not in text
