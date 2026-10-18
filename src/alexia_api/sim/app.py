@@ -37,6 +37,7 @@ from alexia_api.sim.mail import (
     folder_selection,
     folder_tree,
     html_safe_json,
+    message_dto,
     newest_first,
 )
 from alexia_api.sim.world import SimChild, SimFamily, SimWorld, default_world, synthetic_guid
@@ -45,8 +46,19 @@ BASE_URL: Final = "https://sim.invalid"
 LOGON_PATH: Final = "/ACWeb/LogOn.aspx"
 HOME_PATH: Final = "/ACWeb/paginas/Home/HomeMetro.aspx"
 MESSAGES_PATH: Final = "/ACWeb/paginas/Comunicacion/Comunicados.aspx"
+MESSAGE_PATH: Final = "/ACWeb/paginas/Comunicacion/Comunicado.aspx"
 FEED_QUERY: Final = frozenset({"jqGridID", "_search", "nd", "rows", "page", "sidx", "sord"})
 _FEED_NUMBERS: Final = ("nd", "rows", "page")
+_MESSAGE_QUERY: Final = frozenset(
+    {
+        "GuidComunicadoOrigen",
+        "TipoComunicado",
+        "AccionComunicado",
+        "DestsInicialesCom",
+        "TxtDefaultCom",
+        "AccionExtraCom",
+    }
+)
 
 EXPIRED_LOGON_TEXT: Final = "La sesión ha caducado. Vuelva a iniciar sesión."
 BAD_CREDENTIALS_TEXT: Final = "Usuario o código de acceso incorrecto"
@@ -91,6 +103,7 @@ class SimOptions:
     lock_after_failures: int | None = None
     home_route: str | None = None
     feed_cell_count: int | None = None
+    message_time: str | None = None
 
 
 @dataclass(slots=True)
@@ -101,6 +114,7 @@ class SimSession:
     last_activity: float = 0.0
     family: SimFamily | None = None
     folder: SimFolder = "received"
+    message_guid: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -114,10 +128,22 @@ class SimRequest:
 
 @dataclass(frozen=True, slots=True)
 class Service:
-    """A script service method that needs a live session, and the parameter names it expects."""
+    """A script service method that needs a live session, and the parameter names it expects.
+
+    `referer` names the page the call must come from, for the methods that read the page the
+    session has open.
+    """
 
     params: frozenset[str]
     handle: Callable[[SimSession, dict[str, Any]], object]
+    referer: Callable[[SimSession], str] | None = None
+
+
+def _message_url(guid: str | None) -> str:
+    return (
+        f"{MESSAGE_PATH}?GuidComunicadoOrigen={guid}&TipoComunicado=N&AccionComunicado=1"
+        "&DestsInicialesCom=&TxtDefaultCom=&AccionExtraCom="
+    )
 
 
 def _photo(key: str, size: int) -> str:
@@ -288,12 +314,18 @@ class PortalSim:
             "WSComunicados.CarpetaSeleccionada": Service(
                 frozenset({"idCarpeta", "IsAutorizacion", "TextoBusqueda"}), self._select_folder
             ),
+            "WSComunicados.GetDatosPaginaComunicado": Service(
+                frozenset(),
+                self._message_data,
+                referer=lambda session: _message_url(session.message_guid),
+            ),
         }
         routes = [
             Route(LOGON_PATH, self._logon, methods=["GET"]),
             Route("/ACWeb/WS_Data/{service}.asmx/{method}", self._ws, methods=["POST"]),
             Route(HOME_PATH, self._home, methods=["GET"]),
             Route(MESSAGES_PATH, self._messages, methods=["GET"]),
+            Route(MESSAGE_PATH, self._message, methods=["GET"]),
             Route("/ACWeb/paginas/General/MantenerSesion.aspx", self._keep_alive, methods=["GET"]),
             Route("/ACWeb/paginas/General/LogOff.aspx", self._log_off, methods=["GET"]),
         ]
@@ -388,6 +420,10 @@ class PortalSim:
         if service is None or session is None or not self._is_live(session):
             return _expired()
         session.last_activity = self.clock.monotonic()
+        if service.referer is not None and self.options.require_referer:
+            came_from = request.headers.get("referer", "")
+            if not came_from.endswith(service.referer(session)):
+                return _fault()
         try:
             return _envelope(service.handle(session, params))
         except SimFaultError:
@@ -545,6 +581,45 @@ class PortalSim:
         if width is not None:
             cells = [cells[index] if index < len(cells) else "" for index in range(width)]
         return {"id": message.guid, "cell": cells}
+
+    def _message_of(self, session: SimSession, guid: str | None) -> SimMessage | None:
+        family = self._family_of(session)
+        held = family.messages if family else ()
+        return next((message for message in held if message.guid == guid), None)
+
+    async def _message(self, request: Request) -> Response:
+        session = self._live_session(request)
+        if session is None or self._family_of(session) is None:
+            return RedirectResponse(
+                f"{LOGON_PATH}?ReturnUrl={quote(MESSAGE_PATH, safe='')}", status_code=302
+            )
+        query = dict(request.query_params)
+        shaped = (
+            set(query) == _MESSAGE_QUERY
+            and query["TipoComunicado"] == "N"
+            and query["AccionComunicado"] == "1"
+            and not (
+                query["DestsInicialesCom"] or query["TxtDefaultCom"] or query["AccionExtraCom"]
+            )
+        )
+        came_from = request.headers.get("referer", "")
+        from_the_list = came_from.endswith(MESSAGES_PATH) or not self.options.require_referer
+        message = self._message_of(session, query.get("GuidComunicadoOrigen"))
+        if not (shaped and from_the_list) or message is None:
+            return _server_error()
+        session.message_guid = message.guid
+        return HTMLResponse(
+            "<!DOCTYPE html><html><head><title>Comunicado</title></head><body></body></html>"
+        )
+
+    def _message_data(self, session: SimSession, _params: dict[str, Any]) -> object:
+        message = self._message_of(session, session.message_guid)
+        if message is None:
+            raise SimFaultError
+        data = message_dto(message)
+        if self.options.message_time is not None:
+            data["HoraPublicacion"] = self.options.message_time
+        return data
 
     async def _home(self, request: Request) -> Response:
         session = self._live_session(request)

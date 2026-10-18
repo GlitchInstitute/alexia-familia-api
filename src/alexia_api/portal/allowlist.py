@@ -74,6 +74,13 @@ SELECT_FOLDER = WsCall(
     wire.SelectFolderParams,
     TypeAdapter(dict[str, object], config=ConfigDict(strict=True)),
 )
+GET_MESSAGE_DATA = WsCall(
+    "WSComunicados",
+    "GetDatosPaginaComunicado",
+    "read",
+    wire.EmptyParams,
+    _adapter(wire.MessageReply),
+)
 
 _ENTRIES: Final[tuple[WsCall[Any, Any], ...]] = (
     VALIDAR,
@@ -84,6 +91,7 @@ _ENTRIES: Final[tuple[WsCall[Any, Any], ...]] = (
     GET_ROSTER,
     GET_FOLDER_TREE,
     SELECT_FOLDER,
+    GET_MESSAGE_DATA,
 )
 ALLOWLIST: Final[Mapping[str, WsCall[Any, Any]]] = MappingProxyType(
     {call.name: call for call in _ENTRIES}

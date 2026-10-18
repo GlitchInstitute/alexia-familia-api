@@ -4,6 +4,7 @@ from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import pytest
 from pydantic import SecretStr
@@ -76,12 +77,13 @@ class Harness:
             institution_key=institution_key,
         )
 
-    def session(self, gates: Gates | None = None) -> PortalSession:
+    def session(self, gates: Gates | None = None, zone: ZoneInfo | None = None) -> PortalSession:
         session = PortalSession(
             self.sim.base_url,
             transport=self.sim.transport(),
             clock=self.clock,
             gates=gates,
+            zone=zone,
         )
         self.opened.append(session)
         return session
@@ -95,10 +97,11 @@ class Harness:
         role_id: RoleId | None = None,
         fresh_for: float = 600.0,
         state_dir: Path | None = None,
+        zone: ZoneInfo | None = None,
     ) -> Gateway:
         return Gateway(
             account=parse_account_id(account),
-            session=self.session(gates),
+            session=self.session(gates, zone),
             credentials=credentials if credentials is not None else self.credentials(),
             breaker=BreakerStore(state_dir or self.state_dir, self.clock),
             clock=self.clock,

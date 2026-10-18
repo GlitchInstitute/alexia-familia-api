@@ -10,11 +10,13 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Final, Literal, Protocol
+from zoneinfo import ZoneInfo
 
 import httpx
 
 from alexia_api.clock import Clock, SystemClock
 from alexia_api.domain.errors import PortalError, Transport
+from alexia_api.domain.time import DEFAULT_ZONE_NAME
 from alexia_api.portal.transport import (
     DEFAULT_MAX_BYTES,
     DEFAULT_TIMEOUT_SECONDS,
@@ -75,6 +77,10 @@ class Tx(Protocol):
     @property
     def gates(self) -> Gates: ...
 
+    @property
+    def zone(self) -> ZoneInfo:
+        """The school's time zone. The portal writes its times as wall time in this zone."""
+
     async def request(self, request: PortalRequest) -> PortalResponse: ...
 
     def absolute(self, path: str) -> str: ...
@@ -116,6 +122,7 @@ class PortalSession:
         gates: Gates | None = None,
         transport: httpx.AsyncBaseTransport | None = None,
         clock: Clock | None = None,
+        zone: ZoneInfo | None = None,
         min_spacing: float = DEFAULT_SPACING_SECONDS,
         user_agent: str = DEFAULT_USER_AGENT,
         timeout: float = DEFAULT_TIMEOUT_SECONDS,
@@ -127,6 +134,7 @@ class PortalSession:
         self._root = httpx.URL(f"{base.scheme}://{base.netloc.decode('ascii')}/")
         self._gates = gates or Gates()
         self._clock = clock or SystemClock()
+        self._zone = zone or ZoneInfo(DEFAULT_ZONE_NAME)
         self._min_spacing = min_spacing
         self._on_request = on_request
         self._last_start = float("-inf")
@@ -140,6 +148,10 @@ class PortalSession:
     @property
     def gates(self) -> Gates:
         return self._gates
+
+    @property
+    def zone(self) -> ZoneInfo:
+        return self._zone
 
     @property
     def host(self) -> str:

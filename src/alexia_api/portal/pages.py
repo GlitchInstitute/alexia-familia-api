@@ -13,6 +13,7 @@ from alexia_api.portal.session import PortalRequest, PortalResponse, Tx
 from alexia_api.portal.ws import MAINTENANCE_STATUSES, looks_like_logon_page
 
 COMUNICADOS_PAGE: Final = "/ACWeb/paginas/Comunicacion/Comunicados.aspx"
+COMUNICADO_PAGE: Final = "/ACWeb/paginas/Comunicacion/Comunicado.aspx"
 
 PAGE_ACCEPT: Final = "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
 FEED_ACCEPT: Final = "application/json, text/javascript, */*; q=0.01"

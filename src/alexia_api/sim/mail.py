@@ -38,6 +38,12 @@ class SimFile:
 
 
 @dataclass(frozen=True, slots=True)
+class SimTranslation:
+    subject: str
+    body_html: str
+
+
+@dataclass(frozen=True, slots=True)
 class SimMessage:
     guid: str
     folder: SimFolder
@@ -52,6 +58,9 @@ class SimMessage:
     institutional: bool = False
     anonymous: bool = False
     files: tuple[SimFile, ...] = ()
+    child_names: str = ""
+    can_reply: bool = True
+    translations: tuple[SimTranslation, ...] = ()
 
 
 def newest_first(message: SimMessage) -> tuple[str, str]:
@@ -96,6 +105,36 @@ def feed_cells(message: SimMessage) -> list[str]:
         escape(message.category),
         attached,
     ]
+
+
+def message_dto(message: SimMessage) -> dict[str, object]:
+    """The reply to the call that gives the data of the open message, with every field it has."""
+    spare = SimTranslation("", "")
+    second, third = (*message.translations, spare, spare)[:2]
+    return {
+        "Destinatarios": [],
+        "AdjuntosExistentes": [
+            {"Id": file.id, "Nombre": file.name, "Tamanio": len(file.data)}
+            for file in message.files
+        ],
+        "EnviarComoCentro": message.institutional,
+        "Contestable": message.can_reply,
+        "Asunto_1": message.subject,
+        "Asunto_2": second.subject,
+        "Asunto_3": third.subject,
+        "Mensaje_1": message.body_html,
+        "Mensaje_2": second.body_html,
+        "Mensaje_3": third.body_html,
+        "FechaPublicacion": message.date,
+        "HoraPublicacion": message.time,
+        "FechaExpiracion": message.expires or "",
+        "Categoria": message.category,
+        "HoyEsNoticia": False,
+        "Simultaneo": False,
+        "CuentaEmailId": "",
+        "NombreEmisor": "" if message.anonymous else message.sender,
+        "NombreHijos": message.child_names,
+    }
 
 
 def folder_tree(counts: Mapping[SimFolder, int], selected: SimFolder) -> dict[str, str]:

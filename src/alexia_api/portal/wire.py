@@ -8,9 +8,9 @@ strict about types, because a portal that starts sending a number as text should
 
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
 
-from alexia_api.domain.ids import GUID_PATTERN
+from alexia_api.domain.ids import GUID_PATTERN, attachment_token
 
 GuidText = Annotated[str, StringConstraints(pattern=GUID_PATTERN)]
 
@@ -123,3 +123,38 @@ class SelectFolderParams(RequestModel):
     folder_id: FolderId = Field(alias="idCarpeta")
     is_authorization: MessagesFlag = Field(default="0", alias="IsAutorizacion")
     search_text: Literal[""] = Field(default="", alias="TextoBusqueda")
+
+
+class MessageFile(WireModel):
+    """A file that the page of a message lists."""
+
+    id: str = Field(alias="Id")
+    name: str = Field(alias="Nombre")
+    size: int = Field(alias="Tamanio", ge=0)
+
+    @field_validator("id")
+    @classmethod
+    def _can_be_named_by_a_token(cls, value: str) -> str:
+        attachment_token(value)
+        return value
+
+
+class MessageReply(WireModel):
+    """The page of one message. The subject and the text each come in three versions.
+
+    The portal sends more than this, such as the recipients and the settings the sender chose.
+    Nothing here uses those, so they are left out.
+    """
+
+    files: list[MessageFile] = Field(alias="AdjuntosExistentes")
+    can_reply: bool = Field(alias="Contestable")
+    subject_1: str = Field(alias="Asunto_1")
+    subject_2: str = Field(alias="Asunto_2")
+    subject_3: str = Field(alias="Asunto_3")
+    text_1: str = Field(alias="Mensaje_1")
+    text_2: str = Field(alias="Mensaje_2")
+    text_3: str = Field(alias="Mensaje_3")
+    published_on: str = Field(alias="FechaPublicacion", pattern=r"^[0-9]{4}-[0-9]{2}-[0-9]{2}$")
+    published_at: str = Field(alias="HoraPublicacion", pattern=r"^[0-9]{2}:[0-9]{2}$")
+    sender: str = Field(alias="NombreEmisor")
+    child_names: str = Field(alias="NombreHijos")

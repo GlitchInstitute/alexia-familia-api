@@ -1,4 +1,5 @@
 from contextlib import aclosing
+from zoneinfo import ZoneInfo
 
 import httpx
 import pytest
@@ -214,6 +215,11 @@ def test_the_session_reports_its_host_and_builds_absolute_addresses() -> None:
 
     assert session.host == "portal.test"
     assert session.absolute("/ACWeb/LogOn.aspx") == "https://portal.test:8443/ACWeb/LogOn.aspx"
+
+
+def test_the_school_zone_is_madrid_until_the_session_is_given_another() -> None:
+    assert PortalSession(BASE).zone.key == "Europe/Madrid"
+    assert PortalSession(BASE, zone=ZoneInfo("Pacific/Auckland")).zone.key == "Pacific/Auckland"
 
 
 @pytest.mark.parametrize(
