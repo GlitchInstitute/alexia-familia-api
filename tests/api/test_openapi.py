@@ -50,9 +50,24 @@ async def test_every_operation_is_explained_and_has_its_own_id(api: Api) -> None
         assert operation["tags"], (method, path)
 
 
+async def test_every_tag_an_operation_uses_is_described(api: Api) -> None:
+    schema = await schema_of(api)
+    described = {tag["name"] for tag in schema["tags"] if tag.get("description")}
+    used = {tag for _, _, operation in operations(schema) for tag in operation["tags"]}
+
+    assert used <= described
+
+
 async def test_the_operation_ids_read_well_in_a_generated_client(api: Api) -> None:
     ids = {operation["operationId"] for _, _, operation in operations(await schema_of(api))}
-    assert {"list_accounts", "list_children", "get_tracking", "check_connection"} <= ids
+    assert {
+        "list_accounts",
+        "list_children",
+        "get_tracking",
+        "check_connection",
+        "list_folders",
+        "list_messages",
+    } <= ids
 
 
 async def test_both_ways_to_send_a_key_are_documented(api: Api) -> None:
@@ -114,9 +129,26 @@ async def test_cached_reads_document_their_cache_headers(api: Api) -> None:
         "/v1/accounts/{account}/children/{child}",
         "/v1/accounts/{account}/children/{child}/tracking",
         "/v1/accounts/{account}/children/{child}/staff",
+        "/v1/accounts/{account}/folders",
+        "/v1/accounts/{account}/messages",
     ):
         headers = paths[path]["get"]["responses"]["200"]["headers"]
         assert set(headers) == {"X-Cache", "Age"}, path
+
+
+async def test_every_parameter_is_explained(api: Api) -> None:
+    for path, method, operation in operations(await schema_of(api)):
+        for parameter in operation.get("parameters", []):
+            assert parameter.get("description"), (method, path, parameter["name"])
+
+
+async def test_the_message_list_documents_its_folders_and_its_page_limits(api: Api) -> None:
+    operation = (await schema_of(api))["paths"]["/v1/accounts/{account}/messages"]["get"]
+    parameters = {parameter["name"]: parameter["schema"] for parameter in operation["parameters"]}
+
+    assert parameters["folder"]["enum"] == ["received", "sent"]
+    assert (parameters["limit"]["minimum"], parameters["limit"]["maximum"]) == (1, 100)
+    assert parameters["offset"]["minimum"] == 0
 
 
 async def test_the_problem_schema_lists_what_a_client_can_rely_on(api: Api) -> None:

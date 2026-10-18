@@ -17,7 +17,7 @@ from alexia_api.api.deps import Services
 from alexia_api.api.errors import install_handlers
 from alexia_api.api.middleware import RequestContext
 from alexia_api.api.openapi import install_openapi
-from alexia_api.api.routers import accounts, children, meta
+from alexia_api.api.routers import accounts, children, messages, meta
 from alexia_api.clock import Clock, SystemClock
 from alexia_api.config import Settings, find_config_file, load_settings
 from alexia_api.services.keys import FILE_NAME, ApiKeyStore
@@ -49,6 +49,10 @@ TAGS: Final = [
     {"name": "meta", "description": "Is the server up, and where is everything."},
     {"name": "accounts", "description": "The portal accounts this server holds, and their state."},
     {"name": "children", "description": "The children of an account and their school data."},
+    {
+        "name": "messages",
+        "description": "The message folders of an account and the messages in them.",
+    },
 ]
 
 
@@ -85,6 +89,7 @@ def _declare(lifespan: Lifespan[FastAPI] | None, pages: dict[str, Any]) -> FastA
     app.include_router(meta.router)
     app.include_router(accounts.router)
     app.include_router(children.router)
+    app.include_router(messages.router)
     install_openapi(app)
     return app
 

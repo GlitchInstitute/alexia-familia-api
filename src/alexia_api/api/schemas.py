@@ -11,6 +11,7 @@ from pydantic import Field
 from alexia_api.domain.accounts import Account
 from alexia_api.domain.base import Model
 from alexia_api.domain.children import Child, StaffMember
+from alexia_api.domain.messages import Folder, MessageSummary
 
 
 class Index(Model):
@@ -49,6 +50,33 @@ class ChildList(Model):
 
 class StaffList(Model):
     items: tuple[StaffMember, ...]
+
+
+class FolderList(Model):
+    items: tuple[Folder, ...]
+
+
+class MessagePage(Model):
+    """One page of the messages in a folder, newest first."""
+
+    items: tuple[MessageSummary, ...]
+    total: int = Field(
+        description=(
+            "How many messages match, counting every page. It counts the messages this server "
+            "holds, which is fewer than the portal lists when `truncated` is true."
+        )
+    )
+    limit: int = Field(description="The page size that was asked for.")
+    offset: int = Field(description="How many matching messages come before this page.")
+    next_offset: int | None = Field(
+        description="The offset to ask for the next page, or null on the last page."
+    )
+    truncated: bool = Field(
+        description=(
+            "True when the folder is longer than this server reads. The newest messages are "
+            "here and the oldest are left out."
+        )
+    )
 
 
 class ConnectionCheck(Model):

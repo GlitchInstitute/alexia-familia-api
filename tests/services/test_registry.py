@@ -1,6 +1,5 @@
 """The registry gives each account its own gateway and cache, and finds children through them."""
 
-from dataclasses import replace
 from datetime import timedelta
 
 import pytest
@@ -16,8 +15,8 @@ from alexia_api.portal.breaker import BreakerStore
 from alexia_api.portal.inbox import Feed
 from alexia_api.services.errors import NotFoundError
 from alexia_api.services.registry import Directory, Registry
-from alexia_api.sim.world import DEMO_PASSWORD_B, DEMO_USER_B, default_world, synthetic_guid
-from tests.harness import Failure, Harness
+from alexia_api.sim.world import DEMO_PASSWORD_B, DEMO_USER_B, synthetic_guid
+from tests.harness import A_NEW_MESSAGE, Failure, Harness
 
 LUCIA = synthetic_guid(0x101)
 MATEO = synthetic_guid(0x102)
@@ -349,14 +348,7 @@ async def test_a_message_list_is_read_again_after_two_minutes(
 async def test_a_fresh_look_sees_a_message_that_arrived_since(harness: Harness) -> None:
     runtime = harness.registry().get("marta")
     before = await runtime.messages("received")
-    arrived = replace(
-        default_world().families[0].messages[0],
-        guid=synthetic_guid(0x1100),
-        subject="Nuevo aviso",
-        date="2026-10-17",
-        read=False,
-    )
-    harness.deliver("marta.ejemplo", arrived)
+    harness.deliver("marta.ejemplo", A_NEW_MESSAGE)
 
     stale = await runtime.messages("received")
     fresh = await runtime.messages("received", fresh=True)

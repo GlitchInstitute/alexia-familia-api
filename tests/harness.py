@@ -26,6 +26,7 @@ from alexia_api.sim.world import (
     DEMO_USER_B,
     SIM_INSTITUTION_KEY,
     SimChild,
+    default_world,
     synthetic_guid,
 )
 
@@ -37,6 +38,14 @@ A_NEW_SIBLING = SimChild(
     full_name="Inés Ejemplo Muestra",
     first_name="Inés",
     relation="Hija",
+)
+
+A_NEW_MESSAGE = replace(
+    default_world().families[0].messages[0],
+    guid=synthetic_guid(0x1100),
+    subject="Nuevo aviso",
+    date="2026-10-17",
+    read=False,
 )
 
 

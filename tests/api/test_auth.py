@@ -3,11 +3,13 @@ import pytest
 from alexia_api.services.keys import FILE_NAME
 from tests.api.support import Api, MakeApi, bearer, problem_of
 
-CHILD_ROUTES = (
+ACCOUNT_DATA_ROUTES = (
     "/v1/accounts/marta/children",
     "/v1/accounts/marta/children/lucia",
     "/v1/accounts/marta/children/lucia/tracking",
     "/v1/accounts/marta/children/lucia/staff",
+    "/v1/accounts/marta/folders",
+    "/v1/accounts/marta/messages",
 )
 
 
@@ -113,11 +115,22 @@ async def test_an_account_a_key_may_not_use_looks_like_one_that_does_not_exist(a
     assert api.portal_calls() == 0
 
 
-@pytest.mark.parametrize("path", CHILD_ROUTES)
-async def test_a_hidden_account_has_no_child_routes_either(api: Api, path: str) -> None:
+@pytest.mark.parametrize("path", ACCOUNT_DATA_ROUTES)
+async def test_a_hidden_account_has_no_data_routes_either(api: Api, path: str) -> None:
     issued = api.keys.create("pablo-only", scopes=["read"], accounts=["pablo"])
     response = await api.get(path, key=issued.key)
     problem_of(response, status=404, code="account_not_found")
+    assert api.portal_calls() == 0
+
+
+@pytest.mark.parametrize("path", ACCOUNT_DATA_ROUTES)
+async def test_a_key_that_holds_only_the_feed_scope_cannot_read_account_data(
+    api: Api, path: str
+) -> None:
+    issued = api.keys.create("calendar", scopes=["feed"], accounts=["*"])
+    response = await api.get(path, key=issued.key)
+    body = problem_of(response, status=403, code="insufficient_scope")
+    assert body["needed"] == "read"
     assert api.portal_calls() == 0
 
 

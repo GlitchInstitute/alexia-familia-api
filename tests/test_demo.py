@@ -177,7 +177,7 @@ def test_the_banner_shows_the_key_the_documentation_and_a_request_for_each_sugge
     assert KEY in lines
     assert "http://127.0.0.1:8000/docs" in lines
     for path, what in TOUR:
-        request = f'curl -H "Authorization: Bearer {KEY}" http://127.0.0.1:8000{path}'
+        request = f'curl -H "Authorization: Bearer {KEY}" "http://127.0.0.1:8000{path}"'
         assert lines[lines.index(f"# {what}") + 1] == request
 
 

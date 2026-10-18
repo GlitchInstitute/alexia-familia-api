@@ -48,6 +48,8 @@ TOUR: Final = (
     ("/v1/accounts", "the accounts this key may use"),
     ("/v1/accounts/marta/children", "the children of one account"),
     ("/v1/accounts/marta/children/lucia/tracking", "what the school tracks for one child"),
+    ("/v1/accounts/marta/folders", "the message folders of one account"),
+    ("/v1/accounts/marta/messages?limit=5", "the five newest messages"),
 )
 """Requests the demo suggests, as a path and a few words about it. A test asks for each one."""
 
@@ -121,10 +123,13 @@ def address(host: str, port: int) -> str:
 
 
 def banner(base: str, key: str, *, windows: bool = False) -> str:
-    """What a person needs to start trying the demo, with the key and the address filled in."""
+    """What a person needs to start trying the demo, with the key and the address filled in.
+
+    Each address is quoted, because zsh reads an unquoted `?` as a wildcard.
+    """
     curl = "curl.exe" if windows else "curl"
     requests = "\n\n".join(
-        f'    # {what}\n    {curl} -H "Authorization: Bearer {key}" {base}{path}'
+        f'    # {what}\n    {curl} -H "Authorization: Bearer {key}" "{base}{path}"'
         for path, what in TOUR
     )
     return (

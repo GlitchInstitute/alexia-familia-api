@@ -20,6 +20,11 @@ FOLDER_OF_ID: Final[Mapping[str, SimFolder]] = {id_: name for name, id_ in FOLDE
 
 ICON_BASE: Final = "https://static.sim.invalid/img/comunicacion"
 
+_READ_ICONS: Final[Mapping[bool | None, tuple[str, str]]] = {
+    True: ("sobre_abierto", "Leído"),
+    False: ("sobre_cerrado", "No leído"),
+    None: ("sobre_nuevo", "Pendiente"),
+}
 _TREE_TYPE: Final = "NodoArbolAttrSpanAdicionalTexto:#CospaAgilmic.NS.Web.Componentes.Tree"
 _HTML_SAFE: Final = str.maketrans({"<": "\\u003c", ">": "\\u003e", "&": "\\u0026", "'": "\\u0027"})
 
@@ -41,7 +46,7 @@ class SimMessage:
     date: str
     time: str
     body_html: str
-    read: bool = True
+    read: bool | None = True
     expires: str | None = None
     category: str = ""
     institutional: bool = False
@@ -65,7 +70,7 @@ def html_safe_json(value: object) -> str:
 
 def feed_cells(message: SimMessage) -> list[str]:
     """The eleven cells of one row of the message list."""
-    icon, state = ("sobre_abierto", "Leído") if message.read else ("sobre_cerrado", "No leído")
+    icon, state = _READ_ICONS[message.read]
     more = "Pulse para obtener más información"
     info = (
         f'<img src="{ICON_BASE}/lector.png" alt="{more}" title="{more}" '
