@@ -102,6 +102,14 @@ class Gateway:
             state = await self._ensure(fresh=fresh)
             return CheckResult(session=state, child_count=self.child_count)
 
+    async def refresh(self) -> Connection:
+        """Report the connection after checking whether someone lifted the block on disk.
+
+        This never calls the portal, so a status page costs the school nothing.
+        """
+        await self._forget_a_lifted_block()
+        return self.connection
+
     async def reset_breaker(self) -> bool:
         """Lift a block after a person fixed the cause. Returns whether there was one."""
         async with self._lock:
@@ -117,7 +125,21 @@ class Gateway:
         self._last_ok_at = self._clock.now()
         self._last_ok_tick = self._clock.monotonic()
 
+    async def _forget_a_lifted_block(self) -> None:
+        """Drop the in-memory block when the file is gone, so the command line can lift it.
+
+        Another login may write a new block while the file is being read, so the old block is
+        dropped only if it is still the one that was seen before the read.
+        """
+        observed = self._blocked
+        if observed is None:
+            return
+        on_disk = await asyncio.to_thread(self._breaker.read, self._account)
+        if on_disk is None and self._blocked is observed:
+            self._blocked = None
+
     async def _ensure(self, *, fresh: bool) -> Literal["new", "reused"]:
+        await self._forget_a_lifted_block()
         if self._blocked is not None:
             raise PortalError(BreakerOpen(since=self._blocked.since, cause=self._blocked.cause))
         if not fresh and self._last_ok_tick is not None:

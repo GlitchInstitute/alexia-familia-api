@@ -10,6 +10,7 @@ from alexia_api.domain.children import (
     Guardian,
     StaffMember,
     TrackingCounters,
+    apply_pins,
     assign_slugs,
     slugify,
 )
@@ -25,6 +26,17 @@ from alexia_api.domain.ids import (
 
 def guid(number: int) -> str:
     return f"5afe0000-0000-4000-8000-{number:012x}"
+
+
+def a_child(number: int, first_name: str, slug: str) -> Child:
+    return Child(
+        id=parse_student_id(guid(number)),
+        person_id=parse_person_id(guid(number + 1000)),
+        slug=parse_child_slug(slug),
+        name=f"{first_name} Ejemplo",
+        first_name=first_name,
+        relation=None,
+    )
 
 
 @pytest.mark.parametrize(
@@ -70,6 +82,52 @@ def test_no_children_means_no_slugs() -> None:
     assert assign_slugs([]) == {}
 
 
+def test_a_pinned_slug_wins_and_the_others_work_around_it() -> None:
+    first, second = (parse_student_id(guid(n)) for n in (1, 2))
+
+    slugs = assign_slugs(
+        [(first, "Ana"), (second, "Ana")], pinned={second: parse_child_slug("ana")}
+    )
+
+    assert slugs == {second: "ana", first: "ana-2"}
+
+
+def test_a_pinned_slug_may_differ_from_the_name() -> None:
+    only = parse_student_id(guid(1))
+
+    assert assign_slugs([(only, "Ana")], pinned={only: parse_child_slug("the-eldest")}) == {
+        only: "the-eldest"
+    }
+
+
+def test_a_pin_for_a_child_the_portal_no_longer_lists_frees_its_slug() -> None:
+    present, gone = (parse_student_id(guid(n)) for n in (1, 2))
+
+    slugs = assign_slugs([(present, "Ana")], pinned={gone: parse_child_slug("ana")})
+
+    assert slugs == {present: "ana"}
+
+
+def test_two_children_pinned_to_one_slug_are_refused() -> None:
+    first, second = (parse_student_id(guid(n)) for n in (1, 2))
+    shared = parse_child_slug("twins")
+
+    with pytest.raises(ValueError, match="same slug"):
+        assign_slugs([(first, "Ana"), (second, "Eva")], pinned={first: shared, second: shared})
+
+
+def test_pins_are_applied_to_whole_children_without_changing_the_originals() -> None:
+    children = [a_child(1, "Ana", "ana"), a_child(2, "Ana", "ana-2")]
+
+    pinned = apply_pins(children, {children[1].id: parse_child_slug("ana")})
+
+    assert [(child.id, child.slug) for child in pinned] == [
+        (children[0].id, "ana-2"),
+        (children[1].id, "ana"),
+    ]
+    assert [child.slug for child in children] == ["ana", "ana-2"]
+
+
 guids = st.integers(min_value=0, max_value=2**40).map(guid)
 
 
@@ -86,6 +144,26 @@ def test_slugs_are_unique_valid_and_independent_of_input_order(
         assert len(slug) <= MAX_SLUG_LENGTH
         assert parse_child_slug(slug) == slug
     assert assign_slugs(list(reversed(typed))) == slugs
+
+
+@given(
+    st.lists(st.tuples(guids, st.text(max_size=60)), unique_by=lambda pair: pair[0], max_size=8),
+    st.integers(min_value=0, max_value=8),
+)
+def test_pinned_slugs_are_kept_and_every_slug_stays_unique(
+    children: list[tuple[str, str]], how_many: int
+) -> None:
+    typed = [(parse_student_id(student_id), name) for student_id, name in children]
+    pinned = {
+        student_id: parse_child_slug(f"pin-{index}")
+        for index, (student_id, _) in enumerate(typed[:how_many])
+    }
+
+    slugs = assign_slugs(typed, pinned)
+
+    assert {student_id: slugs[student_id] for student_id in pinned} == pinned
+    assert len(set(slugs.values())) == len(typed)
+    assert assign_slugs(list(reversed(typed)), pinned) == slugs
 
 
 def test_a_slug_is_not_a_child_id() -> None:

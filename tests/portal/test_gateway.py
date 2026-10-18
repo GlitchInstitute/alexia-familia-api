@@ -148,6 +148,50 @@ async def test_resetting_an_account_that_is_not_blocked_says_so(harness: Harness
     assert await harness.gateway().reset_breaker() is False
 
 
+async def test_a_running_gateway_notices_a_block_lifted_on_disk(
+    harness: Harness, failure: Failure
+) -> None:
+    harness.sim.options.multifactor = True
+    gateway = harness.gateway()
+    await failure(gateway.call(read_home))
+    assert isinstance(connection_of(gateway), Blocked)
+
+    harness.sim.options.multifactor = False
+    BreakerStore(harness.state_dir, harness.clock).clear(parse_account_id("family-a"))
+    snapshot = await gateway.call(read_home)
+
+    assert len(snapshot.children) == 2
+    assert isinstance(connection_of(gateway), LoggedIn)
+
+
+async def test_a_block_lifted_on_disk_shows_in_the_status_without_calling_the_portal(
+    harness: Harness, failure: Failure
+) -> None:
+    harness.sim.options.multifactor = True
+    gateway = harness.gateway()
+    await failure(gateway.call(read_home))
+    seen = len(harness.sim.requests)
+
+    assert isinstance(await gateway.refresh(), Blocked)
+    BreakerStore(harness.state_dir, harness.clock).clear(parse_account_id("family-a"))
+
+    assert isinstance(await gateway.refresh(), LoggedOut)
+    assert len(harness.sim.requests) == seen
+
+
+async def test_a_block_that_is_still_on_disk_stays_in_force(
+    harness: Harness, failure: Failure
+) -> None:
+    harness.sim.options.multifactor = True
+    gateway = harness.gateway()
+    await failure(gateway.call(read_home))
+    seen = len(harness.sim.requests)
+
+    assert isinstance(await failure(gateway.call(read_home)), BreakerOpen)
+    assert isinstance(await gateway.refresh(), Blocked)
+    assert len(harness.sim.requests) == seen
+
+
 async def test_a_multifactor_prompt_blocks_the_account(harness: Harness, failure: Failure) -> None:
     harness.sim.options.multifactor = True
     gateway = harness.gateway()

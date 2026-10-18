@@ -2,7 +2,7 @@
 
 import re
 import unicodedata
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Final
 
 from pydantic import Field
@@ -65,15 +65,28 @@ def slugify(text: str) -> str:
     return words[: MAX_SLUG_LENGTH - _SUFFIX_ROOM].strip("-") or _FALLBACK_SLUG
 
 
-def assign_slugs(children: Sequence[tuple[StudentId, str]]) -> dict[StudentId, ChildSlug]:
+def assign_slugs(
+    children: Sequence[tuple[StudentId, str]],
+    pinned: Mapping[StudentId, ChildSlug] | None = None,
+) -> dict[StudentId, ChildSlug]:
     """Give each child a slug from the first name, adding `-2`, `-3` on a collision.
+
+    A pinned slug is kept as given, and the other children work around it. A pin for a child that
+    the portal no longer lists is ignored, which frees its slug.
 
     Children are ranked by student id before slugs are handed out, so the answer does not depend
     on the order the portal lists them in. The child with the smallest id keeps the plain slug.
     """
-    taken: set[str] = set()
-    slugs: dict[StudentId, ChildSlug] = {}
+    listed = {student_id for student_id, _ in children}
+    slugs = {
+        student_id: slug for student_id, slug in (pinned or {}).items() if student_id in listed
+    }
+    taken: set[str] = set(slugs.values())
+    if len(taken) != len(slugs):
+        raise ValueError("two children are pinned to the same slug")
     for student_id, first_name in sorted(children, key=lambda entry: entry[0]):
+        if student_id in slugs:
+            continue
         base = slugify(first_name)
         candidate = base
         number = 2
@@ -83,3 +96,11 @@ def assign_slugs(children: Sequence[tuple[StudentId, str]]) -> dict[StudentId, C
         taken.add(candidate)
         slugs[student_id] = ChildSlug(candidate)
     return slugs
+
+
+def apply_pins(
+    children: Sequence[Child], pinned: Mapping[StudentId, ChildSlug]
+) -> tuple[Child, ...]:
+    """Return the children with their final slugs, in the order given."""
+    slugs = assign_slugs([(child.id, child.first_name) for child in children], pinned)
+    return tuple(child.model_copy(update={"slug": slugs[child.id]}) for child in children)
