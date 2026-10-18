@@ -3,7 +3,6 @@
 import os
 import re
 import sys
-from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
 from typing import get_args
@@ -14,48 +13,13 @@ from pydantic import SecretStr
 
 from alexia_api.config import AccountSettings, FixedSettings
 from alexia_api.doctor import HOW_TO_UNBLOCK, Diagnosis, Finding, diagnose, probe_portals
-from alexia_api.domain.accounts import Blocked
 from alexia_api.domain.errors import BREAKER_CAUSE_TEXT, BreakerCause, NoRole, PortalError, describe
-from alexia_api.domain.ids import parse_account_id
-from alexia_api.portal.breaker import BREAKER_DIRECTORY, BreakerStore
 from alexia_api.portal.session import PortalSession
-from alexia_api.services.keys import FILE_NAME, ApiKeyStore
+from alexia_api.services.keys import FILE_NAME
 from tests.harness import Harness
+from tests.workspace import ENVIRON, HEALTHY_ACCOUNT, block, make_key, write_config
 
 cannot_deny_access = sys.platform == "win32" or (hasattr(os, "geteuid") and os.geteuid() == 0)
-
-ENVIRON = {"MARTA_USER": "marta.ejemplo", "MARTA_PASSWORD": "demo-password-a"}
-HEALTHY_ACCOUNT = """
-[accounts.marta]
-portal_url = "http://localhost:8081"
-institution_key = "demo-school"
-username = "env:MARTA_USER"
-password = "env:MARTA_PASSWORD"
-"""
-
-
-def write_config(
-    directory: Path,
-    *,
-    top: str = "",
-    account: str = HEALTHY_ACCOUNT,
-    state: Path | None = None,
-) -> Path:
-    path = directory / "alexia-api.toml"
-    chosen = state or directory / "state"
-    path.write_text(f'state_dir = "{chosen.as_posix()}"\n{top}\n{account}', encoding="utf-8")
-    return path
-
-
-def make_key(directory: Path, name: str = "phone", accounts: tuple[str, ...] = ("*",)) -> None:
-    ApiKeyStore(directory / "state" / FILE_NAME).create(name, scopes=["read"], accounts=accounts)
-
-
-def block(directory: Path, cause: BreakerCause) -> None:
-    BreakerStore(directory / "state" / BREAKER_DIRECTORY).write(
-        parse_account_id("marta"),
-        Blocked(cause=cause, since=datetime(2026, 10, 18, 20, 15, tzinfo=UTC)),
-    )
 
 
 def about(diagnosis: Diagnosis, subject: str) -> list[Finding]:
