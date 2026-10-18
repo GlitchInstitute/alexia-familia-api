@@ -109,6 +109,14 @@ async def _fetch_token(tx: Tx, institution_key: str) -> str:
     return token
 
 
+async def check_login_page(tx: Tx, institution_key: str) -> None:
+    """Open the portal's login page and check that it has the field a login needs.
+
+    No credentials are sent, so this cannot count as a failed login and cannot lock the account.
+    """
+    await _fetch_token(tx, institution_key)
+
+
 def _home_path(tx: Tx, home_route: str) -> str:
     resolved = tx.absolute(home_route)
     root = tx.absolute("/")

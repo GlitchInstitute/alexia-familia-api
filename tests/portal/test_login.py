@@ -21,7 +21,7 @@ from alexia_api.domain.errors import (
     UnexpectedReply,
 )
 from alexia_api.domain.ids import RoleId, parse_role_id
-from alexia_api.portal.login import LoginOk, classify_refusal, login
+from alexia_api.portal.login import LoginOk, check_login_page, classify_refusal, login
 from alexia_api.portal.session import PortalSession
 from alexia_api.sim.app import (
     BAD_CREDENTIALS_TEXT,
@@ -34,6 +34,7 @@ from alexia_api.sim.world import (
     DEMO_PASSWORD_B,
     DEMO_USER_A,
     DEMO_USER_B,
+    SIM_INSTITUTION_KEY,
     synthetic_guid,
 )
 from tests.harness import Failure, Harness
@@ -245,3 +246,46 @@ def test_credentials_do_not_print_their_secrets(harness: Harness) -> None:
 
     assert DEMO_PASSWORD_A not in text
     assert DEMO_USER_A not in text
+
+
+async def test_checking_the_login_page_opens_it_and_sends_no_credentials(harness: Harness) -> None:
+    await check_login_page(harness.session(), SIM_INSTITUTION_KEY)
+
+    assert [(request.method, request.path) for request in harness.sim.requests] == [
+        ("GET", "/ACWeb/LogOn.aspx")
+    ]
+    assert harness.sim.counters.login_attempts == 0
+
+
+async def test_checking_the_login_page_reports_a_maintenance_page(
+    harness: Harness, failure: Failure
+) -> None:
+    harness.sim.options.maintenance = "page"
+
+    detail = await failure(check_login_page(harness.session(), SIM_INSTITUTION_KEY))
+
+    assert detail == PortalMaintenance(status=200)
+
+
+async def test_checking_the_login_page_reports_a_503_as_maintenance(
+    harness: Harness, failure: Failure
+) -> None:
+    harness.sim.options.maintenance = "http503"
+
+    detail = await failure(check_login_page(harness.session(), SIM_INSTITUTION_KEY))
+
+    assert detail == PortalMaintenance(status=503)
+
+
+async def test_checking_the_login_page_notices_a_page_that_is_not_the_portal(
+    failure: Failure,
+) -> None:
+    transport = httpx.MockTransport(
+        lambda _request: httpx.Response(200, html="<html><body>Hello</body></html>")
+    )
+    session = PortalSession("https://portal.example.test", transport=transport)
+
+    async with aclosing(session):
+        detail = await failure(check_login_page(session, "demo-school"))
+
+    assert detail == UnexpectedReply(where="logon page has no Token field")
