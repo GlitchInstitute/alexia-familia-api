@@ -9,7 +9,9 @@ import uvicorn
 from alexia_api import __version__
 from alexia_api.cli.report import render, verdict
 from alexia_api.cli.shared import ConfigOption
+from alexia_api.config import CONFIG_ENV
 from alexia_api.doctor import diagnose, probe_portals
+from alexia_api.logs import log_config
 
 app = typer.Typer(
     name="alexia-api",
@@ -40,17 +42,40 @@ def main(
 
 @app.command()
 def serve(
-    host: str = typer.Option("127.0.0.1", help="Address to listen on."),
-    port: int = typer.Option(8000, help="Port to listen on."),
-    reload: bool = typer.Option(False, help="Reload on code changes. For development."),
+    config: ConfigOption = None,
+    host: Annotated[
+        str,
+        typer.Option(
+            help="Address to listen on. Use 0.0.0.0 to accept other machines, as in a container."
+        ),
+    ] = "127.0.0.1",
+    port: Annotated[int, typer.Option(help="Port to listen on.")] = 8000,
+    reload: Annotated[bool, typer.Option(help="Reload on code changes. For development.")] = False,
 ) -> None:
-    """Start the REST API."""
+    """Check the setup, then start the REST API.
+
+    The checks are the ones `doctor` runs. The server does not start while a line is marked
+    stop. A line marked fail or warn is shown and the server starts anyway, so that you can
+    make a key from inside a running container.
+    """
+    diagnosis = diagnose(config, os.environ)
+    notices = [finding for finding in diagnosis.findings if finding.level != "ok"]
+    if notices:
+        typer.echo(render(notices), err=True)
+        typer.echo(err=True)
+        typer.echo(verdict(diagnosis.findings), err=True)
+    settings = diagnosis.settings
+    if settings is None or diagnosis.blocked:
+        raise typer.Exit(1)
+    if config is not None:
+        os.environ[CONFIG_ENV] = str(config)
     uvicorn.run(
         "alexia_api.api.app:create_app",
         factory=True,
         host=host,
         port=port,
         reload=reload,
+        log_config=log_config(settings.log_level, settings.log_format),
     )
 
 
