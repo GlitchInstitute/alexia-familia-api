@@ -1,21 +1,30 @@
 """A simulated portal plus everything needed to open sessions and gateways against it."""
 
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 import pytest
 from pydantic import SecretStr
 
 from alexia_api.clock import ManualClock
+from alexia_api.config import AccountSettings, Settings
 from alexia_api.domain.errors import PortalError, PortalErrorDetail
 from alexia_api.domain.ids import RoleId, parse_account_id
 from alexia_api.portal.breaker import BreakerStore
 from alexia_api.portal.gateway import Gateway
 from alexia_api.portal.login import PortalCredentials
 from alexia_api.portal.session import Gates, PortalSession
+from alexia_api.services.registry import Registry
 from alexia_api.sim.app import PortalSim
-from alexia_api.sim.world import DEMO_PASSWORD_A, DEMO_USER_A, SIM_INSTITUTION_KEY
+from alexia_api.sim.world import (
+    DEMO_PASSWORD_A,
+    DEMO_PASSWORD_B,
+    DEMO_USER_A,
+    DEMO_USER_B,
+    SIM_INSTITUTION_KEY,
+)
 
 type Failure = Callable[[Awaitable[object]], Awaitable[PortalErrorDetail]]
 
@@ -33,6 +42,7 @@ class Harness:
     clock: ManualClock
     state_dir: Path
     opened: list[PortalSession] = field(default_factory=list)
+    registries: list[Registry] = field(default_factory=list)
 
     def credentials(
         self,
@@ -75,6 +85,40 @@ class Harness:
             role_id=role_id,
             fresh_for=fresh_for,
         )
+
+    def account_settings(
+        self,
+        username: str = DEMO_USER_A,
+        password: str = DEMO_PASSWORD_A,
+        **overrides: Any,
+    ) -> AccountSettings:
+        return AccountSettings(
+            portal_url=self.sim.base_url,
+            institution_key=SIM_INSTITUTION_KEY,
+            username=SecretStr(username),
+            password=SecretStr(password),
+            **overrides,
+        )
+
+    def settings(self, **overrides: Any) -> Settings:
+        """Settings for two accounts, `marta` and `pablo`, unless `accounts` says otherwise."""
+        accounts = overrides.pop("accounts", None) or {
+            "marta": self.account_settings(),
+            "pablo": self.account_settings(DEMO_USER_B, DEMO_PASSWORD_B),
+        }
+        return Settings(accounts=accounts, state_dir=self.state_dir, **overrides)
+
+    def registry(
+        self, settings: Settings | None = None, *, environ: Mapping[str, str] | None = None
+    ) -> Registry:
+        registry = Registry.build(
+            settings or self.settings(),
+            environ=environ or {},
+            clock=self.clock,
+            transport_for=lambda _account: self.sim.transport(),
+        )
+        self.registries.append(registry)
+        return registry
 
     def requests_to(self, suffix: str) -> int:
         return sum(1 for request in self.sim.requests if request.path.endswith(suffix))

@@ -39,3 +39,5 @@ async def harness(clock: ManualClock, tmp_path: Path) -> AsyncIterator[Harness]:
     yield harness
     for session in harness.opened:
         await session.aclose()
+    for registry in harness.registries:
+        await registry.aclose()
