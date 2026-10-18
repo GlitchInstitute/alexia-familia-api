@@ -10,6 +10,7 @@ import os
 import tempfile
 from datetime import datetime
 from pathlib import Path
+from typing import Final
 
 from pydantic import ValidationError
 
@@ -18,6 +19,9 @@ from alexia_api.domain.accounts import Blocked
 from alexia_api.domain.ids import AccountId, parse_account_id
 
 log = logging.getLogger(__name__)
+
+BREAKER_DIRECTORY: Final = "breaker"
+"""The folder inside the state directory that holds one block file for each account."""
 
 
 class BreakerStore:

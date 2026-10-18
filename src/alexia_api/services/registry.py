@@ -24,7 +24,7 @@ from alexia_api.domain.ids import (
     parse_role_id,
 )
 from alexia_api.domain.security import Principal
-from alexia_api.portal.breaker import BreakerStore
+from alexia_api.portal.breaker import BREAKER_DIRECTORY, BreakerStore
 from alexia_api.portal.children import read_home
 from alexia_api.portal.gateway import CheckResult, Gateway
 from alexia_api.portal.login import PortalCredentials
@@ -155,7 +155,7 @@ class Registry:
             restore_unread=settings.restore_unread,
             forms=settings.allow_forms,
         )
-        breaker = BreakerStore(settings.state_dir / "breaker", clock)
+        breaker = BreakerStore(settings.state_dir / BREAKER_DIRECTORY, clock)
         runtimes = []
         for name, account in settings.accounts.items():
             account_id = parse_account_id(name)
