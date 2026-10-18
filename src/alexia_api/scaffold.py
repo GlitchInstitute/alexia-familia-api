@@ -16,6 +16,7 @@ from pydantic import SecretStr, ValidationError
 
 from alexia_api.config import DEFAULT_CONFIG_NAME, AccountSettings
 from alexia_api.domain.ids import InvalidIdError, parse_account_id
+from alexia_api.oserrors import why
 from alexia_api.reference import NAME_PLACEHOLDER, Section, SettingDoc, catalog, format_value
 
 DEFAULT_ACCOUNT: Final = "family"
@@ -82,14 +83,14 @@ def write_starter(path: Path, text: str, *, replace: bool = False) -> None:
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
     except OSError as error:
-        raise ScaffoldError(f"{path.parent} cannot be made, {_why(error)}") from None
+        raise ScaffoldError(f"{path.parent} cannot be made, {why(error)}") from None
     flags = os.O_WRONLY | os.O_CREAT | (os.O_TRUNC if replace else os.O_EXCL)
     try:
         descriptor = os.open(path, flags, 0o600)
     except FileExistsError:
         raise ScaffoldError(f"{path} already exists, add --force to replace it") from None
     except OSError as error:
-        raise ScaffoldError(f"{path} cannot be written, {_why(error)}") from None
+        raise ScaffoldError(f"{path} cannot be written, {why(error)}") from None
     with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
         handle.write(text)
 
@@ -127,10 +128,6 @@ def _set_variable(name: str, value: str, *, windows: bool) -> str:
     if windows:
         return f"       $env:{name} = '{value}'"
     return f"       export {name}='{value}'"
-
-
-def _why(error: OSError) -> str:
-    return error.strerror or type(error).__name__
 
 
 def _account_name(account: str) -> str:
