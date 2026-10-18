@@ -1,0 +1,8 @@
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.pdf binary
+
+pixi.lock linguist-language=YAML linguist-generated=true
+docs/openapi.json linguist-generated=true

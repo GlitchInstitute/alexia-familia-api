@@ -1,0 +1,132 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "alexia-familia-api"
+dynamic = ["version"]
+description = "A self-hosted REST API for the Alexia Familia parent portal."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.12"
+authors = [{ name = "alexia-familia-api contributors" }]
+keywords = ["alexia", "school", "parents", "fastapi", "rest-api", "pixi"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Framework :: FastAPI",
+  "Intended Audience :: End Users/Desktop",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Topic :: Education",
+  "Typing :: Typed",
+]
+dependencies = [
+  "fastapi>=0.143",
+  "uvicorn>=0.54",
+  "pydantic>=2.14",
+  "pydantic-settings>=2.16",
+  "httpx>=0.28",
+  "selectolax>=1",
+  "nh3>=0.3",
+  "icalendar>=7",
+  "typer>=0.27",
+  "tzdata",
+]
+
+[project.scripts]
+alexia-api = "alexia_api.cli:app"
+
+[project.urls]
+Homepage = "https://github.com/GlitchInstitute/alexia-familia-api"
+Documentation = "https://github.com/GlitchInstitute/alexia-familia-api/tree/main/docs"
+Issues = "https://github.com/GlitchInstitute/alexia-familia-api/issues"
+Changelog = "https://github.com/GlitchInstitute/alexia-familia-api/blob/main/CHANGELOG.md"
+
+[tool.hatch.version]
+path = "src/alexia_api/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/alexia_api"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+  "/src",
+  "/tests",
+  "/docs",
+  "/README.md",
+  "/LICENSE",
+  "/CHANGELOG.md",
+  "/pixi.toml",
+  "/pixi.lock",
+  "/pyproject.toml",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+  "E", "W", "F", "I", "N", "UP", "B", "A", "C4", "DTZ", "T20", "SIM", "PT", "PTH", "RET", "RUF",
+  "S", "ASYNC", "TRY", "PERF", "ARG", "PIE", "TC", "LOG", "G", "BLE", "FURB", "ERA", "INP", "ISC",
+]
+ignore = [
+  "TRY003",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "S105", "S106", "ARG001", "ARG002", "DTZ001"]
+# The simulator's logins are fake and public. `alexia-api demo` prints them for people to try.
+"src/alexia_api/sim/world.py" = ["S105"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["alexia_api"]
+
+[tool.ruff.lint.flake8-type-checking]
+runtime-evaluated-base-classes = [
+  "pydantic.BaseModel",
+  "pydantic_settings.BaseSettings",
+  "alexia_api.domain.base.Model",
+  "alexia_api.portal.wire.WireModel",
+  "alexia_api.portal.wire.RequestModel",
+]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+files = ["src", "tests"]
+plugins = ["pydantic.mypy"]
+warn_unreachable = true
+enable_error_code = ["ignore-without-code", "redundant-expr", "truthy-bool"]
+
+[tool.pydantic-mypy]
+init_forbid_extra = true
+init_typed = true
+warn_required_dynamic_aliases = true
+
+[tool.pytest.ini_options]
+minversion = "9.0"
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+addopts = ["-ra", "--strict-markers", "--strict-config"]
+filterwarnings = ["error"]
+markers = [
+  "e2e: starts real servers on local sockets",
+]
+
+[tool.coverage.run]
+source = ["alexia_api"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+exclude_also = [
+  "if TYPE_CHECKING:",
+  "raise NotImplementedError",
+  "assert_never",
+]

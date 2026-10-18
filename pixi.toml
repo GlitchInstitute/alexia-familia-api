@@ -1,0 +1,84 @@
+[workspace]
+name = "alexia-familia-api"
+version = "0.1.0"
+description = "A self-hosted REST API for the Alexia Familia parent portal."
+authors = ["alexia-familia-api contributors"]
+license = "MIT"
+license-file = "LICENSE"
+readme = "README.md"
+repository = "https://github.com/GlitchInstitute/alexia-familia-api"
+channels = ["conda-forge"]
+platforms = ["linux-64", "linux-aarch64", "osx-64", "osx-arm64", "win-64"]
+requires-pixi = ">=0.50"
+
+[dependencies]
+fastapi-core = ">=0.143,<1"
+uvicorn = ">=0.54,<1"
+pydantic = ">=2.14,<3"
+pydantic-settings = ">=2.16,<3"
+httpx = ">=0.28,<1"
+selectolax = ">=1,<2"
+nh3 = ">=0.3,<1"
+icalendar = ">=7,<8"
+typer = ">=0.27,<1"
+python-tzdata = "*"
+
+[pypi-dependencies]
+alexia-familia-api = { path = ".", editable = true }
+
+[feature.py312.dependencies]
+python = "3.12.*"
+
+[feature.py313.dependencies]
+python = "3.13.*"
+
+[feature.py314.dependencies]
+python = "3.14.*"
+
+[feature.dev.dependencies]
+pytest = ">=9,<10"
+pytest-asyncio = ">=1.4,<2"
+pytest-cov = ">=7,<8"
+hypothesis = ">=6,<7"
+ruff = ">=0.17,<1"
+mypy = ">=2.4,<3"
+openapi-spec-validator = ">=0.9,<1"
+watchfiles = ">=1,<2"
+actionlint = ">=1.7,<2"
+shellcheck = ">=0.11,<1"
+
+[environments]
+default = { features = ["py313"], solve-group = "main" }
+dev = { features = ["py313", "dev"], solve-group = "main" }
+py312 = { features = ["py312", "dev"], solve-group = "py312" }
+py314 = { features = ["py314", "dev"], solve-group = "py314" }
+
+[tasks.serve]
+cmd = "alexia-api serve"
+description = "Start the REST API. Reads alexia-api.toml and ALEXIA_API_* variables."
+
+[tasks.demo]
+cmd = "alexia-api demo"
+description = "Start the API against a simulated school portal. No account needed."
+
+[tasks.init]
+cmd = "alexia-api init"
+description = "Write alexia-api.toml and create the first API key."
+
+[tasks.keys]
+cmd = "alexia-api keys"
+description = "Manage API keys. Example, pixi run keys create --name phone."
+
+[tasks.doctor]
+cmd = "alexia-api doctor"
+description = "Check the configuration, the state directory, and the portal address."
+
+[feature.dev.tasks]
+watch = { cmd = "alexia-api serve --reload", description = "Start the REST API and reload on code changes." }
+test = { cmd = "pytest", description = "Run the test suite." }
+cov = { cmd = "pytest --cov --cov-report=term-missing --cov-fail-under=90", description = "Run the test suite and enforce the coverage floor." }
+lint = { cmd = "ruff check . && ruff format --check .", description = "Check style and common mistakes." }
+fmt = { cmd = "ruff check --fix . && ruff format .", description = "Fix style problems and format the code." }
+typecheck = { cmd = "mypy", description = "Type check with mypy in strict mode." }
+privacy = { cmd = "python scripts/check_privacy.py --history", description = "Fail when a file or a commit holds real-looking personal data." }
+check = { depends-on = ["lint", "typecheck", "privacy", "cov"], description = "Run every check that CI runs." }

@@ -1,0 +1,38 @@
+# Secrets and local configuration. Never commit these.
+.env
+.env.*
+!.env.example
+alexia-api.toml
+!alexia-api.example.toml
+state/
+*.pem
+*.key
+.denylist.sha256
+
+# pixi environments. pixi.lock is committed.
+.pixi/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+.coverage
+.coverage.*
+htmlcov/
+
+# Editors and operating systems
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Local captures and audit notes. These can hold real family data.
+.recon/
+.audit/
+captures/
