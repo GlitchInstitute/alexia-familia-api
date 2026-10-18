@@ -67,7 +67,7 @@ description = "Write alexia-api.toml with your first account and show what to do
 
 [tasks.keys]
 cmd = "alexia-api keys"
-description = "Manage API keys. Example, pixi run keys create --name phone."
+description = "Make, list, and revoke API keys. Example, pixi run keys create phone."
 
 [tasks.doctor]
 cmd = "alexia-api doctor"

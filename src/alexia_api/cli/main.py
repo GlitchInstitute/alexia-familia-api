@@ -9,8 +9,9 @@ import typer
 import uvicorn
 
 from alexia_api import __version__
+from alexia_api.cli.keys import app as keys_app
 from alexia_api.cli.report import render, verdict
-from alexia_api.cli.shared import ConfigOption, fail
+from alexia_api.cli.shared import ConfigOption, fail, make_app
 from alexia_api.config import CONFIG_ENV, DEFAULT_CONFIG_NAME
 from alexia_api.doctor import diagnose, probe_portals
 from alexia_api.logs import log_config
@@ -22,13 +23,8 @@ from alexia_api.scaffold import (
     write_starter,
 )
 
-app = typer.Typer(
-    name="alexia-api",
-    help="Run and manage the alexia-familia-api server.",
-    no_args_is_help=True,
-    add_completion=False,
-    rich_markup_mode=None,
-)
+app = make_app("alexia-api", "Run and manage the alexia-familia-api server.")
+app.add_typer(keys_app)
 
 
 def _print_version(show: bool) -> None:

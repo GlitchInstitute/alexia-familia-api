@@ -9,11 +9,12 @@ import pytest
 
 from alexia_api.config import CONFIG_ENV
 from alexia_api.scaffold import render_starter
-from alexia_api.services.keys import FILE_NAME, ApiKeyStore
+from tests.cli.conftest import UvicornCall
 from tests.cli.support import run
 
 LOGIN_URL = "http://localhost:8081/ACWeb/LogOn.aspx?key=demo-school"
 EXPORT_LINE = re.compile(r"^\s+export (\w+)='([^']*)'$", re.MULTILINE)
+COMMAND_LINE = re.compile(r"^ {7}alexia-api ")
 
 
 def test_it_writes_the_starter_file_and_lists_the_next_steps(workdir: Path) -> None:
@@ -173,16 +174,17 @@ def test_the_steps_use_the_shell_of_the_platform(
     assert line in result.stdout
 
 
-def test_the_commands_it_prints_make_the_doctor_pass(
-    workdir: Path, monkeypatch: pytest.MonkeyPatch
+def test_every_command_it_prints_works_in_the_order_it_prints_them(
+    monkeypatch: pytest.MonkeyPatch, uvicorn_calls: list[UvicornCall]
 ) -> None:
     monkeypatch.setattr(sys, "platform", "linux")
-    printed = run("init", "--account", "marta", "--login-url", LOGIN_URL)
-    environment = dict(EXPORT_LINE.findall(printed.stdout))
-    ApiKeyStore(workdir / "state" / FILE_NAME).create("phone", scopes=["read"], accounts=["*"])
-
-    result = run("doctor", env=environment)
+    printed = run("init", "--account", "marta", "--login-url", LOGIN_URL).stdout
+    environment = dict(EXPORT_LINE.findall(printed))
+    commands = [shlex.split(line)[1:] for line in printed.splitlines() if COMMAND_LINE.match(line)]
 
     assert environment.keys() == {"PORTAL_MARTA_USERNAME", "PORTAL_MARTA_PASSWORD"}
-    assert result.exit_code == 0
-    assert result.stdout.rstrip().endswith("Everything checks out.")
+    assert [command[:2] for command in commands] == [["keys", "create"], ["doctor"], ["serve"]]
+    for command in commands:
+        result = run(*command, env=environment)
+        assert result.exit_code == 0, result.output
+    assert len(uvicorn_calls) == 1

@@ -9,6 +9,7 @@ import pytest
 import uvicorn
 
 from alexia_api.config import CONFIG_ENV
+from tests.workspace import write_config
 
 
 @dataclass(frozen=True)
@@ -39,3 +40,9 @@ def workdir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     folder.mkdir()
     monkeypatch.chdir(folder)
     return folder
+
+
+@pytest.fixture
+def config(workdir: Path) -> Path:
+    """A healthy configuration file in the working folder, where the commands find it."""
+    return write_config(workdir)

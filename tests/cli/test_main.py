@@ -9,18 +9,29 @@ from alexia_api import __version__
 from tests.cli.conftest import UvicornCall
 from tests.cli.support import run
 
-COMMANDS = ("init", "doctor", "serve")
+COMMANDS = ("init", "doctor", "serve", "keys")
+SCREENS = (
+    ("init",),
+    ("doctor",),
+    ("serve",),
+    ("keys",),
+    ("keys", "create"),
+    ("keys", "list"),
+    ("keys", "revoke"),
+)
+HEADINGS = {"Arguments:", "Options:", "Commands:"}
 SCREEN = {"COLUMNS": "80"}
 HELP_WIDTH = 78
 
 
 def description_paragraphs(help_text: str) -> list[list[str]]:
-    """The paragraphs between the usage line and the options, as the lines the screen shows."""
+    """The paragraphs between the usage line and the first heading, as the screen shows them."""
     lines = help_text.splitlines()
     assert "Options:" in lines, "the help should be plain text with an Options heading"
     first = next(number for number, line in enumerate(lines) if line.startswith("Usage:")) + 1
+    last = next(number for number, line in enumerate(lines) if line in HEADINGS)
     paragraphs: list[list[str]] = [[]]
-    for line in lines[first : lines.index("Options:")]:
+    for line in lines[first:last]:
         if line.strip():
             paragraphs[-1].append(line)
         elif paragraphs[-1]:
@@ -65,17 +76,17 @@ def test_the_only_options_before_a_command_are_the_version_and_the_help() -> Non
     assert re.findall(r"^  (--[a-z-]+)", options, re.MULTILINE) == ["--version", "--help"]
 
 
-@pytest.mark.parametrize("command", COMMANDS)
-def test_every_command_explains_itself(command: str) -> None:
-    result = run(command, "--help")
+@pytest.mark.parametrize("screen", SCREENS, ids=" ".join)
+def test_every_command_explains_itself(screen: tuple[str, ...]) -> None:
+    result = run(*screen, "--help")
 
     assert result.exit_code == 0
-    assert f"alexia-api {command}" in result.output
+    assert f"alexia-api {' '.join(screen)}" in result.output
 
 
-@pytest.mark.parametrize("command", COMMANDS)
-def test_help_paragraphs_fill_the_width_of_the_screen(command: str) -> None:
-    result = run(command, "--help", env=SCREEN)
+@pytest.mark.parametrize("screen", SCREENS, ids=" ".join)
+def test_help_paragraphs_fill_the_width_of_the_screen(screen: tuple[str, ...]) -> None:
+    result = run(*screen, "--help", env=SCREEN)
 
     paragraphs = description_paragraphs(result.output)
     assert paragraphs
