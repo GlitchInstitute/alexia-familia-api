@@ -11,7 +11,7 @@ from urllib.parse import urlsplit
 
 import httpx
 
-from alexia_api.clock import Clock, SystemClock
+from alexia_api.clock import Clock, LocalClock, SystemClock
 from alexia_api.config import AccountSettings, CacheTtls, Settings, read_secret
 from alexia_api.domain.accounts import Account, Capabilities
 from alexia_api.domain.children import Child, Guardian, StaffMember, TrackingCounters, apply_pins
@@ -87,7 +87,8 @@ class AccountRuntime:
         """Find a child by student id or slug.
 
         A missing child is reported from the cached listing, because a lookup that missed must not
-        send a request to the portal. A client that expects a new sibling asks for `fresh`.
+        send a request to the portal. A client that expects a new sibling reads the list of
+        children with `fresh` first.
         """
         listing = await self.directory(fresh=fresh)
         wanted = reference.lower()
@@ -147,7 +148,7 @@ class Registry:
         Every secret is read before any session opens, so a missing variable stops the server
         before it holds a connection. Nothing here calls the portal. The first request does.
         """
-        clock = clock or SystemClock()
+        clock = LocalClock(clock or SystemClock(), settings.tzinfo)
         secrets = {
             name: (
                 read_secret(account.username, setting=f"accounts.{name}.username", environ=environ),

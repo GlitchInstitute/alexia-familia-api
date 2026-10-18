@@ -1,5 +1,7 @@
 """The registry gives each account its own gateway and cache, and finds children through them."""
 
+from datetime import timedelta
+
 import pytest
 
 from alexia_api.clock import ManualClock
@@ -330,6 +332,20 @@ async def test_status_after_a_login_shows_the_session_and_the_children_seen(
     assert after.child_count == 2
     assert after.label == "marta"
     assert len(harness.sim.requests) == calls
+
+
+@pytest.mark.parametrize(("zone", "hours"), [("Europe/Madrid", 1), ("Asia/Tokyo", 9)])
+async def test_times_the_server_makes_carry_the_offset_of_the_school_zone(
+    harness: Harness, zone: str, hours: int
+) -> None:
+    runtime = harness.registry(harness.settings(timezone=zone)).get("marta")
+    await runtime.directory()
+
+    connection = (await runtime.status()).connection
+
+    assert isinstance(connection, LoggedIn)
+    assert connection.since.utcoffset() == timedelta(hours=hours)
+    assert connection.last_success_at.utcoffset() == timedelta(hours=hours)
 
 
 async def test_the_operator_switches_show_in_the_status(harness: Harness) -> None:

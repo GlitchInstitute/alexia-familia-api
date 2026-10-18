@@ -2,7 +2,7 @@
 
 import asyncio
 import time
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, timedelta, tzinfo
 from typing import Protocol
 
 
@@ -26,6 +26,27 @@ class SystemClock:
 
     async def sleep(self, seconds: float) -> None:
         await asyncio.sleep(seconds)
+
+
+class LocalClock:
+    """Names the same instants as the clock it wraps, with the offset of one time zone.
+
+    The server wraps its clock once, so every timestamp it makes, such as the time a login
+    started, reaches a client in the school's zone like the times that come from the portal.
+    """
+
+    def __init__(self, inner: Clock, zone: tzinfo) -> None:
+        self._inner = inner
+        self._zone = zone
+
+    def now(self) -> datetime:
+        return self._inner.now().astimezone(self._zone)
+
+    def monotonic(self) -> float:
+        return self._inner.monotonic()
+
+    async def sleep(self, seconds: float) -> None:
+        await self._inner.sleep(seconds)
 
 
 class ManualClock:
