@@ -6,11 +6,24 @@ from typing import Any
 
 import httpx
 from fastapi import FastAPI
+from icalendar import Calendar, Event
 
 from alexia_api.services.keys import ApiKeyStore
 from tests.harness import Harness
 
 PROBLEM_MEDIA_TYPE = "application/problem+json"
+CALENDAR_MEDIA_TYPE = "text/calendar; charset=utf-8"
+
+
+def unfolded(data: bytes) -> list[str]:
+    """The lines of an iCalendar file, with each folded line joined again."""
+    return data.decode("utf-8").replace("\r\n ", "").split("\r\n")
+
+
+def vevents(data: bytes) -> list[Event]:
+    """The events of an iCalendar file, parsed back from its bytes."""
+    parsed = Calendar.from_ical(data)
+    return [item for item in parsed.walk("VEVENT") if isinstance(item, Event)]
 
 
 def bearer(key: str) -> dict[str, str]:

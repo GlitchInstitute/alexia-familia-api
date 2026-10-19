@@ -11,6 +11,7 @@ from alexia_api.api.openapi import (
     describe_validation_failures_as_problems,
     move_problems_to_their_media_type,
 )
+from alexia_api.domain.agenda import EVENT_KINDS
 from tests.api.support import Api, MakeApi, problem_of
 
 PROBLEM_REF = "#/components/schemas/Problem"
@@ -69,6 +70,11 @@ async def test_the_operation_ids_read_well_in_a_generated_client(api: Api) -> No
         "list_messages",
         "get_message",
         "download_attachment",
+        "get_child_agenda",
+        "get_guardian_agenda",
+        "get_child_calendar",
+        "get_guardian_calendar",
+        "get_family_calendar",
     } <= ids
 
 
@@ -82,6 +88,21 @@ async def test_both_ways_to_send_a_key_are_documented(api: Api) -> None:
 async def test_only_the_versioned_operations_ask_for_a_key(api: Api) -> None:
     for path, _, operation in operations(await schema_of(api)):
         assert bool(operation.get("security")) == path.startswith("/v1/"), path
+
+
+async def test_the_calendar_routes_alone_take_a_key_in_the_url(api: Api) -> None:
+    schema = await schema_of(api)
+    feed = schema["components"]["securitySchemes"]["FeedKey"]
+    assert (feed["type"], feed["in"], feed["name"]) == ("apiKey", "query", "key")
+    assert "feed" in feed["description"]
+    calendars = {
+        "/v1/accounts/{account}/children/{child}/agenda.ics",
+        "/v1/accounts/{account}/guardian/agenda.ics",
+        "/v1/accounts/{account}/agenda.ics",
+    }
+    for path, _, operation in operations(schema):
+        takes_a_key_in_the_url = {"FeedKey": []} in operation.get("security", [])
+        assert takes_a_key_in_the_url == (path in calendars), path
 
 
 async def test_no_validation_schema_of_the_framework_is_left(api: Api) -> None:
@@ -131,6 +152,11 @@ async def test_cached_reads_document_their_cache_headers(api: Api) -> None:
         "/v1/accounts/{account}/children/{child}",
         "/v1/accounts/{account}/children/{child}/tracking",
         "/v1/accounts/{account}/children/{child}/staff",
+        "/v1/accounts/{account}/children/{child}/agenda",
+        "/v1/accounts/{account}/guardian/agenda",
+        "/v1/accounts/{account}/children/{child}/agenda.ics",
+        "/v1/accounts/{account}/guardian/agenda.ics",
+        "/v1/accounts/{account}/agenda.ics",
         "/v1/accounts/{account}/folders",
         "/v1/accounts/{account}/messages",
         "/v1/accounts/{account}/messages/{message}",
@@ -175,6 +201,59 @@ async def test_the_download_route_documents_a_file_and_how_it_is_saved(api: Api)
     assert parameters["attachment"]["in"] == "path"
     assert parameters["folder"]["schema"]["enum"] == ["received", "sent"]
     assert "attachment_too_large" in operation["description"]
+
+
+async def test_the_agenda_documents_its_range_its_kinds_and_its_limits(api: Api) -> None:
+    operation = (await schema_of(api))["paths"]["/v1/accounts/{account}/children/{child}/agenda"][
+        "get"
+    ]
+    parameters = {parameter["name"]: parameter for parameter in operation["parameters"]}
+
+    assert {"account", "child", "from", "to", "kind", "fresh"} == set(parameters)
+    assert "date" in json.dumps(parameters["from"]["schema"])
+    assert "date" in json.dumps(parameters["to"]["schema"])
+    kinds = json.dumps(parameters["kind"]["schema"])
+    assert all(kind in kinds for kind in EVENT_KINDS)
+    assert "366 days" in operation["description"]
+    assert "1100 days" in operation["description"]
+    assert "invalid_window" in operation["description"]
+
+
+async def test_the_guardian_agenda_documents_the_login_that_has_no_guardian(api: Api) -> None:
+    operation = (await schema_of(api))["paths"]["/v1/accounts/{account}/guardian/agenda"]["get"]
+    assert "guardian_not_found" in operation["description"]
+    assert {"401", "403", "404", "422", "429", "500", "502", "503", "504"} <= set(
+        operation["responses"]
+    )
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/v1/accounts/{account}/children/{child}/agenda.ics",
+        "/v1/accounts/{account}/guardian/agenda.ics",
+        "/v1/accounts/{account}/agenda.ics",
+    ],
+)
+async def test_a_calendar_route_documents_its_file_its_reach_and_its_key(
+    api: Api, path: str
+) -> None:
+    operation = (await schema_of(api))["paths"][path]["get"]
+    parameters = {parameter["name"]: parameter["schema"] for parameter in operation["parameters"]}
+
+    assert operation["responses"]["200"]["content"] == {
+        "text/calendar": {"schema": {"type": "string"}}
+    }
+    assert {"401", "403", "404", "422", "429", "500", "502", "503", "504"} <= set(
+        operation["responses"]
+    )
+    assert "--scope feed" in operation["description"]
+    for name, default in (("back", 14), ("ahead", 180), ("lessons_ahead", 90)):
+        if name in parameters:
+            schema = parameters[name]
+            assert (schema["minimum"], schema["maximum"], schema["default"]) == (0, 366, default)
+    assert {"back", "ahead"} <= set(parameters)
+    assert "fresh" not in parameters
 
 
 async def test_the_problem_schema_lists_what_a_client_can_rely_on(api: Api) -> None:

@@ -9,7 +9,16 @@ from pathlib import Path
 import httpx
 import pytest
 
-from alexia_api.demo import ENDING_SIGNALS, TOUR, Demo, address, banner, build_demo, demo_state
+from alexia_api.demo import (
+    ENDING_SIGNALS,
+    TOUR,
+    Demo,
+    Suggestion,
+    address,
+    banner,
+    build_demo,
+    demo_state,
+)
 from alexia_api.services.keys import FILE_NAME
 
 SERVER = "http://demo.test"
@@ -48,18 +57,37 @@ async def test_every_request_the_demo_suggests_works_with_its_own_key(
     assert response.status_code == 200
 
 
-async def test_the_one_suggestion_that_answers_with_a_file_gives_a_real_file_to_save(
+def download_named(name: str) -> Suggestion:
+    (download,) = [item for item in TOUR if item.save_as == name]
+    return download
+
+
+async def test_the_attachment_the_demo_suggests_is_a_real_pdf_to_save(
     served: tuple[Demo, httpx.AsyncClient],
 ) -> None:
     demo, client = served
-    (download,) = [item for item in TOUR if item.save_as]
 
-    response = await client.get(download.path, headers=bearer(demo))
+    response = await client.get(download_named("museo.pdf").path, headers=bearer(demo))
 
     assert response.headers["content-type"] == "application/pdf"
     assert response.content.startswith(b"%PDF-")
     assert response.headers["content-disposition"].startswith("attachment;")
-    assert download.save_as == "museo.pdf"
+
+
+async def test_the_calendar_the_demo_suggests_is_a_real_file_for_a_calendar_app(
+    served: tuple[Demo, httpx.AsyncClient],
+) -> None:
+    demo, client = served
+
+    response = await client.get(download_named("familia.ics").path, headers=bearer(demo))
+
+    assert response.headers["content-type"] == "text/calendar; charset=utf-8"
+    assert response.content.startswith(b"BEGIN:VCALENDAR\r\n")
+    assert response.content.endswith(b"END:VCALENDAR\r\n")
+
+
+def test_the_demo_suggests_exactly_these_files() -> None:
+    assert [item.save_as for item in TOUR if item.save_as] == ["museo.pdf", "familia.ics"]
 
 
 async def test_the_demo_holds_two_families_of_two_children(
@@ -200,8 +228,9 @@ def test_the_banner_shows_the_key_the_documentation_and_a_request_for_each_sugge
 def test_only_a_request_that_answers_with_a_file_tells_curl_where_to_save_it() -> None:
     text = banner("http://127.0.0.1:8000", KEY)
 
-    assert text.count("--output") == 1
+    assert text.count("--output") == 2
     assert 'museo.pdf"' in text
+    assert 'familia.ics"' in text
 
 
 def test_the_banner_promises_a_simulated_school_and_that_nothing_is_kept() -> None:

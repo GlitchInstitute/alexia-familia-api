@@ -4,11 +4,13 @@ Every list is an object with an `items` array, so a field can be added next to i
 breaking a client.
 """
 
+from datetime import date
 from typing import Literal
 
-from pydantic import Field
+from pydantic import ConfigDict, Field
 
 from alexia_api.domain.accounts import Account
+from alexia_api.domain.agenda import AgendaEvent
 from alexia_api.domain.base import Model
 from alexia_api.domain.children import Child, StaffMember
 from alexia_api.domain.messages import Folder, MessageSummary
@@ -76,6 +78,21 @@ class MessagePage(Model):
             "True when the folder is longer than this server reads. The newest messages are "
             "here and the oldest are left out."
         )
+    )
+
+
+class Agenda(Model):
+    """The entries of an agenda over a range of days, in the order they happen."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    from_: date = Field(
+        alias="from",
+        description="The first day of the range, inclusive. It is the day that was asked for.",
+    )
+    to: date = Field(description="The last day of the range, inclusive.")
+    items: tuple[AgendaEvent, ...] = Field(
+        description="The entries that touch the range, earliest first, with the kinds asked for."
     )
 
 

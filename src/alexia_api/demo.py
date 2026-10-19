@@ -69,6 +69,14 @@ TOUR: Final = (
     Suggestion(
         "/v1/accounts/marta/children/lucia/tracking", "what the school tracks for one child"
     ),
+    Suggestion(
+        "/v1/accounts/marta/children/lucia/staff",
+        "the teachers a guardian can meet about one child",
+    ),
+    Suggestion(
+        "/v1/accounts/marta/children/lucia/agenda",
+        "the lessons and school events of one child for the coming week",
+    ),
     Suggestion("/v1/accounts/marta/folders", "the message folders of one account"),
     Suggestion("/v1/accounts/marta/messages?limit=5", "the five newest messages"),
     Suggestion(_MUSEUM_MESSAGE, "one message, with its words, its links and its files"),
@@ -76,6 +84,11 @@ TOUR: Final = (
         f"{_MUSEUM_MESSAGE}/attachments/{attachment_token(MUSEUM_FORM_FILE_ID)}",
         "the file of that message",
         save_as="museo.pdf",
+    ),
+    Suggestion(
+        "/v1/accounts/marta/agenda.ics",
+        "one calendar file for the whole family, to open in a calendar app",
+        save_as="familia.ics",
     ),
 )
 """Requests the demo suggests. A test asks for each one."""

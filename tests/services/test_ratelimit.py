@@ -1,6 +1,8 @@
 """A key may make a limited number of requests a minute, and it is told when to come back."""
 
 import pytest
+from hypothesis import given
+from hypothesis import strategies as st
 
 from alexia_api.clock import ManualClock
 from alexia_api.services.ratelimit import RateLimiter
@@ -61,6 +63,22 @@ def test_each_key_has_its_own_bucket(clock: ManualClock) -> None:
     assert limiter.check("home") is None
     assert limiter.check("home") is not None
     assert limiter.check("phone") is None
+
+
+@given(
+    per_minute=st.integers(min_value=1, max_value=600),
+    gaps=st.lists(st.floats(min_value=0, max_value=90, allow_nan=False), min_size=1, max_size=60),
+)
+def test_a_refusal_always_names_a_wait_of_more_than_nothing(
+    per_minute: int, gaps: list[float]
+) -> None:
+    clock = ManualClock()
+    limiter = RateLimiter(per_minute, clock)
+
+    for gap in gaps:
+        clock.advance(gap)
+        wait = limiter.check("home")
+        assert wait is None or wait > 0
 
 
 def test_a_limit_of_zero_turns_the_limiter_off(clock: ManualClock) -> None:

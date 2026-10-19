@@ -9,6 +9,8 @@ ACCOUNT_DATA_ROUTES = (
     "/v1/accounts/marta/children/lucia",
     "/v1/accounts/marta/children/lucia/tracking",
     "/v1/accounts/marta/children/lucia/staff",
+    "/v1/accounts/marta/children/lucia/agenda",
+    "/v1/accounts/marta/guardian/agenda",
     "/v1/accounts/marta/folders",
     "/v1/accounts/marta/messages",
     f"/v1/accounts/marta/messages/{synthetic_guid(0x1001)}",

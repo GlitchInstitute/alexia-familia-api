@@ -17,7 +17,7 @@ from alexia_api.api.deps import Services
 from alexia_api.api.errors import install_handlers
 from alexia_api.api.middleware import RequestContext
 from alexia_api.api.openapi import install_openapi
-from alexia_api.api.routers import accounts, children, messages, meta
+from alexia_api.api.routers import accounts, agenda, children, messages, meta
 from alexia_api.clock import Clock, SystemClock
 from alexia_api.config import Settings, find_config_file, load_settings
 from alexia_api.services.keys import FILE_NAME, ApiKeyStore
@@ -34,7 +34,8 @@ your own account and serves what the school shows you about your children.
 
 **Keys.** Send an API key as `Authorization: Bearer <key>` or in the `X-API-Key` header. Make keys \
 with `alexia-api keys create`. A key holds scopes (`read`, `write`, `admin`, `feed`) and a list of \
-accounts it may use.
+accounts it may use. The calendar feeds also take a key that holds only the `feed` scope as \
+`?key=`, because a calendar app cannot send a header.
 
 **Caching.** The server keeps each answer for a short time so that it stays gentle with the \
 school's system. The `X-Cache` and `Age` headers say how an answer was found. Add `fresh=true` to \
@@ -49,6 +50,13 @@ TAGS: Final = [
     {"name": "meta", "description": "Is the server up, and where is everything."},
     {"name": "accounts", "description": "The portal accounts this server holds, and their state."},
     {"name": "children", "description": "The children of an account and their school data."},
+    {
+        "name": "agenda",
+        "description": (
+            "The lessons, interviews, and school events of each child and of the guardian, as "
+            "data and as calendar files that a calendar app can subscribe to."
+        ),
+    },
     {
         "name": "messages",
         "description": "The message folders of an account and the messages in them.",
@@ -89,6 +97,7 @@ def _declare(lifespan: Lifespan[FastAPI] | None, pages: dict[str, Any]) -> FastA
     app.include_router(meta.router)
     app.include_router(accounts.router)
     app.include_router(children.router)
+    app.include_router(agenda.router)
     app.include_router(messages.router)
     install_openapi(app)
     return app

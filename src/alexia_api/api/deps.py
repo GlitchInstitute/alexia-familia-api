@@ -1,6 +1,7 @@
 """What the routes need from the application, found through the request."""
 
 from dataclasses import dataclass
+from datetime import date
 from typing import Annotated, cast
 
 from fastapi import Depends, Request
@@ -21,6 +22,10 @@ class Services:
     keys: ApiKeyStore
     limiter: RateLimiter
     clock: Clock
+
+    def today(self) -> date:
+        """The date at the school right now, which is not always the date where the server is."""
+        return self.clock.now().astimezone(self.settings.tzinfo).date()
 
 
 def get_services(request: Request) -> Services:

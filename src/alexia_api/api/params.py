@@ -10,7 +10,7 @@ from typing import Annotated, Any, Final
 
 from fastapi import Depends, Path, Query, Response
 
-from alexia_api.api.auth import require
+from alexia_api.api.auth import require, require_feed
 from alexia_api.api.deps import ServicesDep
 from alexia_api.domain.children import Child
 from alexia_api.domain.security import Principal, Scope
@@ -47,15 +47,17 @@ CACHE_HEADERS: Final[dict[int | str, dict[str, Any]]] = {
 }
 
 
-@cache
-def account_for(scope: Scope) -> Callable[..., Awaitable[AccountRuntime]]:
-    """A dependency that finds the account in the path, if the key holds `scope` and may use it."""
+type AccountSource = Callable[..., Awaitable[AccountRuntime]]
+
+
+def _account_after(who: Callable[..., Principal]) -> AccountSource:
+    """A dependency that finds the account in the path, if the caller `who` finds may use it."""
 
     async def resolve(
         account: Annotated[
             str, Path(description="The account's name, as the operator wrote it in the settings.")
         ],
-        principal: Annotated[Principal, Depends(require(scope))],
+        principal: Annotated[Principal, Depends(who)],
         services: ServicesDep,
     ) -> AccountRuntime:
         if not principal.sees(account):
@@ -65,26 +67,37 @@ def account_for(scope: Scope) -> Callable[..., Awaitable[AccountRuntime]]:
     return resolve
 
 
+@cache
+def account_for(scope: Scope) -> AccountSource:
+    """A dependency that finds the account in the path, if the key holds `scope` and may use it."""
+    return _account_after(require(scope))
+
+
+def _child_of(account_source: AccountSource) -> Callable[..., Awaitable[Cached[Child]]]:
+    async def found(
+        child: Annotated[
+            str,
+            Path(
+                description=(
+                    "A student id, or the child's slug as the list of children shows it. "
+                    "Letter case does not matter."
+                )
+            ),
+        ],
+        account: Annotated[AccountRuntime, Depends(account_source)],
+    ) -> Cached[Child]:
+        return await account.child(child)
+
+    return found
+
+
+_feed_account = _account_after(require_feed)
+
 ReadAccount = Annotated[AccountRuntime, Depends(account_for("read"))]
 AdminAccount = Annotated[AccountRuntime, Depends(account_for("admin"))]
-
-
-async def _found_child(
-    child: Annotated[
-        str,
-        Path(
-            description=(
-                "A student id, or the child's slug as the list of children shows it. "
-                "Letter case does not matter."
-            )
-        ),
-    ],
-    account: ReadAccount,
-) -> Cached[Child]:
-    return await account.child(child)
-
-
-FoundChild = Annotated[Cached[Child], Depends(_found_child)]
+FeedAccount = Annotated[AccountRuntime, Depends(_feed_account)]
+FoundChild = Annotated[Cached[Child], Depends(_child_of(account_for("read")))]
+FeedChild = Annotated[Cached[Child], Depends(_child_of(_feed_account))]
 
 
 def stamp(response: Response, cached: Cached[Any]) -> None:
