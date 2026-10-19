@@ -66,6 +66,7 @@ The status tells you who can fix the problem.
 | `staff_not_found` | 404 | The staff list of the child has no such person. | Use an id from the staff list of the same child. Read that list with `fresh=true` if a teacher was added lately. |
 | `message_not_found` | 404 | The folder holds no such message. | Use an id from the list of the same folder, and read the list with `fresh=true` if the message arrived lately. |
 | `attachment_not_found` | 404 | The message has no such file. | Use an id from the `attachments` of the message. |
+| `form_not_found` | 404 | The list of forms holds no such form. | Use an id from the list of forms, and read the list with `fresh=true` if the form arrived lately. |
 | `not_found` | 404 | No route answers at this address. | Check the path against the [endpoint reference](endpoints.md). |
 | `method_not_allowed` | 405 | The route does not take this method. The `Allow` header lists the ones it takes. | Use one of them. |
 | `attachment_too_large` | 413 | A file is larger than the operator's `max_attachment_mib`, so the server did not fetch it. | Ask the operator to raise the limit, or open the message in the portal. |

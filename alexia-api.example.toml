@@ -86,6 +86,9 @@
 # Seconds to reuse one message with its words, after it was read. It must be at least 0.
 # message = 900
 
+# Seconds to reuse the list of forms and the words of a form. It must be at least 0.
+# forms = 300
+
 # Seconds to reuse the agenda of a child or of the guardian for one range. It must be at
 # least 0.
 # agenda = 600

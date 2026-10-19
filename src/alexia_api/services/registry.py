@@ -17,6 +17,7 @@ from alexia_api.domain.absences import Absence
 from alexia_api.domain.accounts import Account, Capabilities
 from alexia_api.domain.agenda import AgendaEvent
 from alexia_api.domain.children import Child, Guardian, StaffMember, TrackingCounters, apply_pins
+from alexia_api.domain.forms import Form
 from alexia_api.domain.ids import (
     AccountId,
     ChildSlug,
@@ -24,6 +25,7 @@ from alexia_api.domain.ids import (
     StudentId,
     parse_account_id,
     parse_attachment_id,
+    parse_form_id,
     parse_message_id,
     parse_role_id,
     parse_staff_id,
@@ -40,6 +42,7 @@ from alexia_api.portal.availability import read_available_days, read_available_h
 from alexia_api.portal.breaker import BREAKER_DIRECTORY, BreakerStore
 from alexia_api.portal.children import read_home
 from alexia_api.portal.folders import read_folder_tree
+from alexia_api.portal.forms import FormFeed, read_form, read_forms
 from alexia_api.portal.gateway import CheckResult, Gateway
 from alexia_api.portal.inbox import Feed, read_feed
 from alexia_api.portal.login import PortalCredentials
@@ -54,8 +57,9 @@ from alexia_api.services.errors import NotFoundError
 type TransportFactory = Callable[[AccountSettings], httpx.AsyncBaseTransport | None]
 
 MAX_CACHED_MESSAGES: Final = 32
-"""How many messages with their words an account keeps. A message with pictures can take several
-mebibytes, so these are kept apart from the lists, which a long run of reads must not push out."""
+"""How many messages and forms with their words an account keeps. A message with pictures can take
+several mebibytes, so these are kept apart from the lists, which a long run of reads must not push
+out."""
 
 MAX_CACHED_AGENDAS: Final = 16
 """How many ranges of an agenda an account keeps. A client can ask for any range, and a year of
@@ -309,6 +313,38 @@ class AccountRuntime:
             fresh=fresh,
         )
         return combine(Message.of(row, content.value), listing, content)
+
+    async def forms(self, *, fresh: bool = False) -> Cached[FormFeed]:
+        """Every form the portal lists for the guardian, newest first."""
+        return await self._cache.get(
+            ("forms",),
+            self._ttls.forms,
+            lambda: self._gateway.call(read_forms),
+            fresh=fresh,
+        )
+
+    async def form(self, reference: str, *, fresh: bool = False) -> Cached[Form]:
+        """One form of the list, with its words.
+
+        A reference that is no form id, or that the portal did not list for this login, is not
+        found without a request to the portal. The row comes from the list as it is now, and the
+        words come from the store of the messages' words, so a form cannot push out the lists.
+        """
+        try:
+            wanted = parse_form_id(reference)
+        except InvalidIdError:
+            raise NotFoundError("form", reference) from None
+        listing = await self.forms(fresh=fresh)
+        row = next((summary for summary in listing.value.forms if summary.id == wanted), None)
+        if row is None:
+            raise NotFoundError("form", reference)
+        content = await self._message_cache.get(
+            ("form", row.id),
+            self._ttls.forms,
+            lambda: self._gateway.call(lambda tx: read_form(tx, row)),
+            fresh=fresh,
+        )
+        return combine(Form.of(row, content.value), listing, content)
 
     async def attachment(
         self, folder: FolderName, reference: str, attachment: str, *, fresh: bool = False

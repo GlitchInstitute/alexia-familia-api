@@ -224,6 +224,9 @@ class CacheTtls(Model):
         ge=0,
         description="Seconds to reuse one message with its words, after it was read.",
     )
+    forms: float = Field(
+        default=300, ge=0, description="Seconds to reuse the list of forms and the words of a form."
+    )
     agenda: float = Field(
         default=600,
         ge=0,

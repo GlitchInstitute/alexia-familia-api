@@ -307,6 +307,11 @@ async def _not_found(request: Request, error: NotFoundError) -> Response:
                 "message, and read the message with fresh=true if the school changed its files "
                 "lately"
             )
+        case "form":
+            detail = (
+                f"no form '{reference}' in the list of forms, use an id from that list, and "
+                "ask for the list with fresh=true if the form arrived lately"
+            )
         case _:
             assert_never(error.kind)
     return problem_response(request, HTTPStatus.NOT_FOUND, f"{error.kind}_not_found", detail)

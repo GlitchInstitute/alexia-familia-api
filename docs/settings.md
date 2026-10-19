@@ -50,6 +50,7 @@ How long answers are reused before the portal is asked again. Zero turns the reu
 | `cache.folders` | `ALEXIA_API_CACHE__FOLDERS` | number | `300` | Seconds to reuse the list of message folders. It must be at least 0. |
 | `cache.messages` | `ALEXIA_API_CACHE__MESSAGES` | number | `120` | Seconds to reuse the list of messages in a folder. It must be at least 0. |
 | `cache.message` | `ALEXIA_API_CACHE__MESSAGE` | number | `900` | Seconds to reuse one message with its words, after it was read. It must be at least 0. |
+| `cache.forms` | `ALEXIA_API_CACHE__FORMS` | number | `300` | Seconds to reuse the list of forms and the words of a form. It must be at least 0. |
 | `cache.agenda` | `ALEXIA_API_CACHE__AGENDA` | number | `600` | Seconds to reuse the agenda of a child or of the guardian for one range. It must be at least 0. |
 | `cache.absences` | `ALEXIA_API_CACHE__ABSENCES` | number | `600` | Seconds to reuse the absences the portal lists for a child. It must be at least 0. |
 | `cache.meetings` | `ALEXIA_API_CACHE__MEETINGS` | number | `300` | Seconds to reuse the meetings the portal lists for a child. It must be at least 0. |

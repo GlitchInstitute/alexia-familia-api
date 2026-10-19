@@ -60,6 +60,14 @@ def seeded(number: int, username: str = DEMO_USER_A) -> SimMessage:
     return next(message for message in family.messages if message.guid == synthetic_guid(number))
 
 
+A_NEW_FORM = replace(
+    seeded(0x1401),
+    guid=synthetic_guid(0x1403),
+    subject="Autorización para la visita al huerto",
+    date="2026-10-17",
+)
+
+
 def teacher(number: int) -> SimStaff:
     """A member of the staff in the simulator's world, found by the number of their id."""
     return next(
