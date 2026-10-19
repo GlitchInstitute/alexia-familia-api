@@ -6,6 +6,7 @@ from typing import Final
 from alexia_api.sim.absences import SimAbsence
 from alexia_api.sim.agenda import SimOccasion, SimSlot
 from alexia_api.sim.mail import SimFile, SimMessage, SimTranslation
+from alexia_api.sim.meetings import SimMeeting, SimOpening
 
 SIM_INSTITUTION_KEY: Final = "demo-school"
 DEMO_USER_A: Final = "marta.ejemplo"
@@ -28,6 +29,7 @@ class SimStaff:
     id: str
     name: str
     role: str
+    openings: tuple[SimOpening, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -51,13 +53,13 @@ class SimChild:
     timetable: tuple[SimSlot, ...] = ()
     events: tuple[SimOccasion, ...] = ()
     absences: tuple[SimAbsence, ...] = ()
+    meetings: tuple[SimMeeting, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
 class SimGuardian:
     person_id: str
     first_name: str
-    interviews: tuple[SimOccasion, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -427,23 +429,92 @@ def _absences_of_alba() -> tuple[SimAbsence, ...]:
     )
 
 
+def _meetings_of_lucia() -> tuple[SimMeeting, ...]:
+    """One meeting that is on, one that took place, and one that the family cancelled.
+
+    The cancelled one is in January, so the portal's own order lists it before the others.
+    """
+    return (
+        SimMeeting(
+            synthetic_guid(0x7301),
+            "Aceptada",
+            (10, 20),
+            "Ana Muestra Tutora",
+            "Marta Ejemplo",
+        ),
+        SimMeeting(
+            synthetic_guid(0x7302),
+            "Realizada",
+            (9, 25),
+            "Ana Muestra Tutora",
+            "Ana Muestra Tutora",
+            start="17:00",
+            note="Seguimiento del inicio de curso.",
+        ),
+        SimMeeting(
+            synthetic_guid(0x7303),
+            "Cancelada",
+            (1, 15),
+            "Carlos Ejemplo Profesor",
+            "Marta Ejemplo",
+            start="15:30",
+            note="La familia no puede asistir.",
+        ),
+    )
+
+
+def _meetings_of_hugo() -> tuple[SimMeeting, ...]:
+    return (
+        SimMeeting(
+            synthetic_guid(0x7311),
+            "Pendiente",
+            (11, 10),
+            "Ana Muestra Tutora",
+            "Pablo Prueba",
+            start="17:00",
+        ),
+    )
+
+
+def _meetings_of_alba() -> tuple[SimMeeting, ...]:
+    """A meeting for the whole class, which the portal starts at 00:00 and times in its note."""
+    return (
+        SimMeeting(
+            synthetic_guid(0x7312),
+            "Realizada",
+            (9, 18),
+            "Rosa Prueba Tutora",
+            "Rosa Prueba Tutora",
+            start="00:00",
+            note="Reunión de aula a las 17:30.",
+        ),
+    )
+
+
 def default_world() -> SimWorld:
     """Two families with two children each, so tests and demos cover several accounts and kids."""
     tutor_a = SimStaff(synthetic_guid(0x601), "Ana Muestra Tutora", "Tutora")
     maths = SimStaff(synthetic_guid(0x602), "Carlos Ejemplo Profesor", "Matemáticas")
-    tutor_b = SimStaff(synthetic_guid(0x603), "Rosa Prueba Tutora", "Tutora")
-    music = SimStaff(synthetic_guid(0x604), "Tomás Demo Profesor", "Música")
+    tutor_b = SimStaff(
+        synthetic_guid(0x603),
+        "Rosa Prueba Tutora",
+        "Tutora",
+        openings=(SimOpening(1, ("17:00-17:30",)),),
+    )
+    music = SimStaff(
+        synthetic_guid(0x604),
+        "Tomás Demo Profesor",
+        "Música",
+        openings=(
+            SimOpening(2, ("15:30-16:00", "16:00-16:30")),
+            SimOpening(4, ("16:30-17:00",)),
+        ),
+    )
 
     family_a = SimFamily(
         username=DEMO_USER_A,
         password=DEMO_PASSWORD_A,
-        guardian=SimGuardian(
-            person_id=synthetic_guid(0x301),
-            first_name="Marta",
-            interviews=(
-                _occasion(0x7301, "Entrevista: Aceptada", (10, 20), starts="16:00", ends="16:30"),
-            ),
-        ),
+        guardian=SimGuardian(person_id=synthetic_guid(0x301), first_name="Marta"),
         children=(
             SimChild(
                 student_id=synthetic_guid(0x101),
@@ -457,6 +528,7 @@ def default_world() -> SimWorld:
                 events=(
                     _occasion(0x7211, "EXCURSIÓN AL MUSEO", (10, 30), starts="09:30", ends="14:00"),
                 ),
+                meetings=_meetings_of_lucia(),
             ),
             SimChild(
                 student_id=synthetic_guid(0x102),
@@ -476,13 +548,7 @@ def default_world() -> SimWorld:
     family_b = SimFamily(
         username=DEMO_USER_B,
         password=DEMO_PASSWORD_B,
-        guardian=SimGuardian(
-            person_id=synthetic_guid(0x311),
-            first_name="Pablo",
-            interviews=(
-                _occasion(0x7311, "Entrevista: Pendiente", (11, 10), starts="17:00", ends="17:30"),
-            ),
-        ),
+        guardian=SimGuardian(person_id=synthetic_guid(0x311), first_name="Pablo"),
         children=(
             SimChild(
                 student_id=synthetic_guid(0x111),
@@ -498,6 +564,7 @@ def default_world() -> SimWorld:
                         0x7231, "ENSAYO GENERAL DEL CORO", (12, 15), starts="17:00", ends="18:30"
                     ),
                 ),
+                meetings=_meetings_of_hugo(),
             ),
             SimChild(
                 student_id=synthetic_guid(0x112),
@@ -510,6 +577,7 @@ def default_world() -> SimWorld:
                 timetable=_timetable(4),
                 events=(_occasion(0x7241, "JORNADA DEPORTIVA", (11, 20)),),
                 absences=_absences_of_alba(),
+                meetings=_meetings_of_alba(),
             ),
         ),
         messages=_mail_of_pablo(),

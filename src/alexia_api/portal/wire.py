@@ -6,6 +6,7 @@ strict about types, because a portal that starts sending a number as text should
 `portal_changed` and not turn into wrong data.
 """
 
+from datetime import date
 from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
@@ -102,6 +103,31 @@ class TrackingReply(WireModel):
 class RosterItem(WireModel):
     value: str = Field(alias="Valor")
     text: str = Field(alias="Texto")
+
+
+class AvailableDaysParams(RequestModel):
+    staff_id: GuidText = Field(alias="guidEmpleado")
+    month: int = Field(alias="mes", ge=1, le=12)
+    year: int = Field(alias="anyo", ge=2000, le=2099)
+
+
+class AvailableDaysReply(WireModel):
+    """One text per free hour, written `year,month,day` with no padding. None free is `{}`."""
+
+    entries: list[str] | None = Field(default=None, alias="horarios")
+
+
+class AvailableHoursParams(RequestModel):
+    """The portal reads `fecha` as ISO text, so the day goes out as `2026-10-20`."""
+
+    staff_id: GuidText = Field(alias="guidEmpleado")
+    day: date = Field(alias="fecha")
+
+
+class AvailableHoursReply(WireModel):
+    """One text per free hour, written `15:30-16:00`. None free is `{}`."""
+
+    hours: list[str] | None = Field(default=None, alias="horas")
 
 
 FolderId = Literal["IdCarpetaRecibidos", "IdCarpetaEnviados"]

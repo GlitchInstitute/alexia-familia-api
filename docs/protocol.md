@@ -43,6 +43,7 @@ Every path starts at `/ACWeb/` on the school's host. The `key` in the login addr
 | One message | `/ACWeb/paginas/Comunicacion/Comunicado.aspx` | Seen |
 | File download | `/ACWeb/Controladores/ControladorRepositorio.ashx` | Seen |
 | Absences page and its grid feed | `/ACWeb/paginas/incidencias/Justificar.aspx` | Seen |
+| Meetings page and its grid feed | `/ACWeb/paginas/Grids/Entrevistas.aspx` | Seen |
 | Script services | `/ACWeb/WS_Data/<Service>.asmx/<Method>` | Seen |
 
 The portal uses GUID strings for people, messages, and roles. A child has two of them, the student id and the person id, and they are different values. The student id feeds the tracking widget and the staff list. The person id feeds the agenda and the photo. The guardian has a person id as well. This project gives each kind its own type, so passing one where the other belongs fails type checking.
@@ -61,6 +62,8 @@ Request models refuse names they do not know, so a typo cannot reach the portal.
 | `WSSesion.CheckSession` | Probes the session | `contador` | `IsOk` and sometimes `Mensaje` | Seen |
 | `WSHome.GetWPSeguimiento` | The tracking widget of one child | `idAlumno` | Five HTML fragments named `tareas`, `actividades`, `anotaciones`, `controles`, `incidencias` | Seen |
 | `WSReuniones.GetEmpleadosByHijo` | The staff a guardian can meet about one child | `guidHijo` | A list of `Valor` and `Texto` | Seen |
+| `WSReuniones.GetFechasDisponibles` | The days of one month on which a person has a free hour | `guidEmpleado`, `mes`, `anyo` | `{horarios: ["YYYY,M,D", ...]}` with one text for each free hour, or `{}` when nothing is free | Seen |
+| `WSReuniones.GetHorasByFecha` | The free hours of one person on one day | `guidEmpleado`, `fecha` as ISO text | `{horas: ["HH:MM-HH:MM", ...]}`, or `{}` when nothing is free | Seen |
 | `WSComunicados.GetArbolCarpetasJSON` | The folder tree | `IsAutorizacion` | `nodos`, which is JSON inside the JSON | Seen |
 | `WSComunicados.CarpetaSeleccionada` | Makes the portal list one folder | `idCarpeta`, `IsAutorizacion`, `TextoBusqueda` | An object that the client ignores | Seen |
 | `WSComunicados.GetDatosPaginaComunicado` | The data of the message that is open | None | The message fields | Seen |

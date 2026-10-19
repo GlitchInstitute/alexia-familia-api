@@ -9,7 +9,9 @@ from alexia_api.domain.errors import Denied, PortalError
 from alexia_api.portal import wire
 from alexia_api.portal.allowlist import ALLOWLIST, WsCall, check_call, is_never_call
 
-SOURCE = Path(__file__).resolve().parents[2] / "src" / "alexia_api"
+ROOT = Path(__file__).resolve().parents[2]
+SOURCE = ROOT / "src" / "alexia_api"
+PROTOCOL_NOTES = ROOT / "docs" / "protocol.md"
 METHOD_NAME = re.compile(r"[A-Z][A-Za-z0-9]+")
 
 
@@ -47,6 +49,12 @@ def test_entries_have_unique_well_formed_names() -> None:
 
     assert len(set(names)) == len(names)
     assert all(re.fullmatch(r"WS[A-Za-z]+\.[A-Za-z]+", name) for name in names)
+
+
+def test_the_protocol_notes_have_a_row_for_every_call_on_the_allowlist() -> None:
+    notes = PROTOCOL_NOTES.read_text(encoding="utf-8")
+
+    assert [call.name for call in ALLOWLIST.values() if f"| `{call.name}` |" not in notes] == []
 
 
 def test_a_lookalike_with_the_same_name_is_not_on_the_allowlist() -> None:

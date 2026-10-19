@@ -12,6 +12,7 @@ hide behind the same constant in the fake.
 
 import json
 import math
+import re
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -30,7 +31,7 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from alexia_api.clock import Clock, SystemClock
 from alexia_api.domain.errors import Interstitial
-from alexia_api.sim import absences, agenda, grids
+from alexia_api.sim import absences, agenda, grids, meetings
 from alexia_api.sim.mail import (
     FOLDER_OF_ID,
     SimFolder,
@@ -42,7 +43,14 @@ from alexia_api.sim.mail import (
     message_dto,
     newest_first,
 )
-from alexia_api.sim.world import SimChild, SimFamily, SimWorld, default_world, synthetic_guid
+from alexia_api.sim.world import (
+    SimChild,
+    SimFamily,
+    SimStaff,
+    SimWorld,
+    default_world,
+    synthetic_guid,
+)
 
 BASE_URL: Final = "https://sim.invalid"
 LOGON_PATH: Final = "/ACWeb/LogOn.aspx"
@@ -52,6 +60,7 @@ MESSAGE_PATH: Final = "/ACWeb/paginas/Comunicacion/Comunicado.aspx"
 REPOSITORY_PATH: Final = "/ACWeb/Controladores/ControladorRepositorio.ashx"
 FEED_QUERY: Final = frozenset({"jqGridID", "_search", "nd", "rows", "page", "sidx", "sord"})
 _FEED_NUMBERS: Final = ("nd", "rows", "page")
+_ISO_DAY: Final = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")
 _MESSAGE_QUERY: Final = frozenset(
     {
         "GuidComunicadoOrigen",
@@ -133,6 +142,8 @@ class SimOptions:
     """The grid feeds answer with an error page that is not JSON."""
     grid_bad_date: bool = False
     """The grid feeds write their dates as year, month, and day and not as the list prints them."""
+    availability_bad_entry: bool = False
+    """The first text of every availability answer is not written as the portal writes it."""
 
 
 @dataclass(slots=True)
@@ -264,6 +275,16 @@ def _widget(count: int) -> str:
     return f'<div class="seguimiento"><span class="numero"><em>{count}</em></span></div>'
 
 
+def _iso_day(text: str) -> date | None:
+    """A day written `2026-10-20`. Any other text, such as a script date, names no day."""
+    if _ISO_DAY.fullmatch(text) is None:
+        return None
+    try:
+        return date.fromisoformat(text)
+    except ValueError:
+        return None
+
+
 class _Tracker:
     """Records every portal request and how many were in flight at once."""
 
@@ -346,6 +367,12 @@ class PortalSim:
         self.services: dict[str, Service] = {
             "WSHome.GetWPSeguimiento": Service(frozenset({"idAlumno"}), self._tracking),
             "WSReuniones.GetEmpleadosByHijo": Service(frozenset({"guidHijo"}), self._roster),
+            "WSReuniones.GetFechasDisponibles": Service(
+                frozenset({"guidEmpleado", "mes", "anyo"}), self._available_days
+            ),
+            "WSReuniones.GetHorasByFecha": Service(
+                frozenset({"guidEmpleado", "fecha"}), self._available_hours
+            ),
             "WSComunicados.GetArbolCarpetasJSON": Service(
                 frozenset({"IsAutorizacion"}), self._folder_tree
             ),
@@ -368,6 +395,7 @@ class PortalSim:
             Route(agenda.PAGE_PATH, self._agenda_page, methods=["GET"]),
             Route(agenda.FEED_PATH, self._agenda_feed, methods=["GET"]),
             Route(absences.GRID.path, self._absences, methods=["GET"]),
+            Route(meetings.GRID.path, self._meetings, methods=["GET"]),
             Route("/ACWeb/paginas/General/MantenerSesion.aspx", self._keep_alive, methods=["GET"]),
             Route("/ACWeb/paginas/General/LogOff.aspx", self._log_off, methods=["GET"]),
         ]
@@ -380,9 +408,13 @@ class PortalSim:
         self.sessions.clear()
 
     @property
+    def today(self) -> date:
+        return self.clock.now().date()
+
+    @property
     def term(self) -> agenda.Term:
         """The school year that the simulator's clock is in, which the agenda is laid out for."""
-        return agenda.term_of(self.clock.now().date())
+        return agenda.term_of(self.today)
 
     def edit_lesson(self, person_id: str, slot_id: str, day: date, edit: agenda.LessonEdit) -> None:
         """Change one lesson of one pupil on one day, as the school does in its timetable."""
@@ -589,6 +621,39 @@ class PortalSim:
         ]
         return [placeholder, *staff]
 
+    def _staff_of(self, session: SimSession, staff_id: object) -> SimStaff:
+        """A person whom a child of the family can meet. The portal's error for anyone else."""
+        family = self._family_of(session)
+        for child in family.children if family else ():
+            for member in child.staff:
+                if member.id == staff_id:
+                    return member
+        raise SimFaultError
+
+    def _available_days(self, session: SimSession, params: dict[str, Any]) -> object:
+        member = self._staff_of(session, params["guidEmpleado"])
+        year, month = params["anyo"], params["mes"]
+        for number in (year, month):
+            if not isinstance(number, int) or isinstance(number, bool):
+                raise SimFaultError
+        if not (1 <= month <= 12 and 1 <= year <= 9999):
+            raise SimFaultError
+        entries = meetings.free_days(member.openings, year, month, self.today)
+        if self.options.availability_bad_entry and entries:
+            entries[0] = "tomorrow"
+        return {"horarios": entries} if entries else {}
+
+    def _available_hours(self, session: SimSession, params: dict[str, Any]) -> object:
+        member = self._staff_of(session, params["guidEmpleado"])
+        text = params["fecha"]
+        if not isinstance(text, str):
+            raise SimFaultError
+        day = _iso_day(text)
+        entries = meetings.free_hours(member.openings, day, self.today) if day else []
+        if self.options.availability_bad_entry and entries:
+            entries[0] = "after lunch"
+        return {"horas": entries} if entries else {}
+
     def _mail_of(self, session: SimSession, folder: SimFolder) -> list[SimMessage]:
         family = self._family_of(session)
         held = family.messages if family else ()
@@ -772,8 +837,9 @@ class PortalSim:
             window=school_window,
         )
         if scope == "guardian":
+            held = tuple(meeting for kid in family.children for meeting in kid.meetings)
             interviews = agenda.occasions_in(
-                family.guardian.interviews,
+                meetings.interviews_of(held),
                 term,
                 class_name=agenda.INTERVIEW_CLASS,
                 object_type=agenda.INTERVIEW_OBJECT,
@@ -840,6 +906,20 @@ class PortalSim:
             )
 
         return await self._grid(request, absences.GRID, rows_of)
+
+    async def _meetings(self, request: Request) -> Response:
+        options, term = self.options, self.term
+
+        def rows_of(child: SimChild) -> list[dict[str, object]]:
+            return meetings.rows_of(
+                child.meetings,
+                child.full_name,
+                term,
+                date_as_iso=options.grid_bad_date,
+                cell_count=options.grid_cell_count,
+            )
+
+        return await self._grid(request, meetings.GRID, rows_of)
 
     async def _home(self, request: Request) -> Response:
         session = self._live_session(request)

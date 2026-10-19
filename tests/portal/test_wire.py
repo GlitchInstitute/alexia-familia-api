@@ -1,6 +1,7 @@
 """The wire models name the portal's fields once and refuse anything that looks wrong."""
 
 import json
+from datetime import date
 
 import pytest
 from pydantic import ValidationError
@@ -38,6 +39,14 @@ def test_request_parameters_refuse_unknown_fields() -> None:
         lambda: wire.FolderTreeParams(is_authorization="1"),  # type: ignore[arg-type]
         lambda: wire.SelectFolderParams(folder_id="IdCarpetaBorradores"),  # type: ignore[arg-type]
         lambda: wire.SelectFolderParams(folder_id="IdCarpetaRecibidos", search_text="x"),  # type: ignore[arg-type]
+        lambda: wire.AvailableDaysParams(staff_id="not-a-guid", month=1, year=2026),
+        lambda: wire.AvailableDaysParams(staff_id=GUID, month=0, year=2026),
+        lambda: wire.AvailableDaysParams(staff_id=GUID, month=13, year=2026),
+        lambda: wire.AvailableDaysParams(staff_id=GUID, month=1, year=1999),
+        lambda: wire.AvailableDaysParams(staff_id=GUID, month=1, year=2100),
+        lambda: wire.AvailableDaysParams(staff_id=GUID, month="1", year=2026),  # type: ignore[arg-type]
+        lambda: wire.AvailableHoursParams(staff_id="not-a-guid", day=date(2026, 1, 6)),
+        lambda: wire.AvailableHoursParams(staff_id=GUID, day="2026-01-06"),  # type: ignore[arg-type]
     ],
 )
 def test_request_parameters_refuse_bad_values(build: object) -> None:
@@ -115,3 +124,62 @@ def test_the_folder_tree_reply_needs_only_the_tree() -> None:
 def test_guid_text_must_be_a_guid() -> None:
     with pytest.raises(ValidationError):
         wire.RoleChoice.model_validate({"Identificador": "123"})
+
+
+def test_availability_requests_are_sent_under_the_portals_own_names() -> None:
+    days = wire.AvailableDaysParams(staff_id=GUID, month=1, year=2026)
+    hours = wire.AvailableHoursParams(staff_id=GUID, day=date(2026, 1, 6))
+
+    assert json.loads(days.model_dump_json(by_alias=True)) == {
+        "guidEmpleado": GUID,
+        "mes": 1,
+        "anyo": 2026,
+    }
+    assert json.loads(hours.model_dump_json(by_alias=True)) == {
+        "guidEmpleado": GUID,
+        "fecha": "2026-01-06",
+    }
+
+
+@pytest.mark.parametrize(
+    ("body", "entries"),
+    [
+        ({}, None),
+        ({"horarios": None}, None),
+        ({"horarios": []}, []),
+        ({"horarios": ["2026,1,6", "2026,1,6"], "otro": 1}, ["2026,1,6", "2026,1,6"]),
+    ],
+)
+def test_the_days_reply_may_be_empty_in_any_way_the_portal_writes_it(
+    body: dict[str, object], entries: list[str] | None
+) -> None:
+    assert wire.AvailableDaysReply.model_validate(body).entries == entries
+
+
+@pytest.mark.parametrize(
+    ("body", "hours"),
+    [
+        ({}, None),
+        ({"horas": None}, None),
+        ({"horas": []}, []),
+        ({"horas": ["15:30-16:00"], "otro": 1}, ["15:30-16:00"]),
+    ],
+)
+def test_the_hours_reply_may_be_empty_in_any_way_the_portal_writes_it(
+    body: dict[str, object], hours: list[str] | None
+) -> None:
+    assert wire.AvailableHoursReply.model_validate(body).hours == hours
+
+
+@pytest.mark.parametrize(
+    "body", [{"horarios": "2026,1,6"}, {"horarios": [2026]}, {"horarios": [None]}]
+)
+def test_the_days_reply_rejects_a_wrong_type_instead_of_guessing(body: dict[str, object]) -> None:
+    with pytest.raises(ValidationError):
+        wire.AvailableDaysReply.model_validate(body)
+
+
+@pytest.mark.parametrize("body", [{"horas": "15:30-16:00"}, {"horas": [1530]}, {"horas": [None]}])
+def test_the_hours_reply_rejects_a_wrong_type_instead_of_guessing(body: dict[str, object]) -> None:
+    with pytest.raises(ValidationError):
+        wire.AvailableHoursReply.model_validate(body)

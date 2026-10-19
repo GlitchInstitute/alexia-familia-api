@@ -12,7 +12,7 @@ from pydantic import SecretStr
 from alexia_api.clock import ManualClock
 from alexia_api.config import AccountSettings, Settings
 from alexia_api.domain.errors import PortalError, PortalErrorDetail
-from alexia_api.domain.ids import RoleId, parse_account_id
+from alexia_api.domain.ids import RoleId, StudentId, parse_account_id, parse_student_id
 from alexia_api.domain.messages import FolderName, MessageSummary
 from alexia_api.portal.breaker import BreakerStore
 from alexia_api.portal.gateway import Gateway
@@ -125,6 +125,18 @@ class Harness:
             role_id=role_id,
             fresh_for=fresh_for,
         )
+
+    def guardian_of(self, first_name: str) -> tuple[Gateway, StudentId]:
+        """A gateway for the guardian of a child of the default world, and the child's id."""
+        for family in default_world().families:
+            for child in family.children:
+                if child.first_name == first_name:
+                    gateway = self.gateway(
+                        account=family.guardian.first_name.lower(),
+                        credentials=self.credentials(family.username, family.password),
+                    )
+                    return gateway, parse_student_id(child.student_id)
+        raise LookupError(first_name)
 
     def account_settings(
         self,

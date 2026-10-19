@@ -19,7 +19,7 @@ from alexia_api.portal.absences import (
 )
 from alexia_api.portal.grid import GridRow
 from alexia_api.sim.app import SimOptions
-from alexia_api.sim.world import SimFamily, default_world, synthetic_guid
+from alexia_api.sim.world import synthetic_guid
 from tests.harness import Failure, Harness
 
 GUID = synthetic_guid(0x7501)
@@ -273,27 +273,8 @@ def test_a_grid_that_is_not_json_is_schema_drift() -> None:
     )
 
 
-def family_of(first_name: str) -> SimFamily:
-    return next(
-        family
-        for family in default_world().families
-        for child in family.children
-        if child.first_name == first_name
-    )
-
-
-def student_of(first_name: str) -> str:
-    family = family_of(first_name)
-    return next(child.student_id for child in family.children if child.first_name == first_name)
-
-
 async def read(harness: Harness, first_name: str) -> tuple[Absence, ...]:
-    family = family_of(first_name)
-    gateway = harness.gateway(
-        account=family.guardian.first_name.lower(),
-        credentials=harness.credentials(family.username, family.password),
-    )
-    student = parse_student_id(student_of(first_name))
+    gateway, student = harness.guardian_of(first_name)
     return await gateway.call(lambda tx: read_absences(tx, student))
 
 
@@ -342,7 +323,8 @@ async def test_each_child_has_its_own_absences(harness: Harness) -> None:
 
 
 async def test_opens_the_page_of_the_child_and_then_reads_the_rows(harness: Harness) -> None:
-    await read(harness, "Mateo")
+    gateway, student = harness.guardian_of("Mateo")
+    await gateway.call(lambda tx: read_absences(tx, student))
 
     asked = [
         parse_qs(request.query)
@@ -350,7 +332,7 @@ async def test_opens_the_page_of_the_child_and_then_reads_the_rows(harness: Harn
         if request.path == ABSENCES_GRID.page
     ]
     context = {
-        "GuidObjeto": [student_of("Mateo")],
+        "GuidObjeto": [student],
         "ObjetoTipo": ["6"],
         "master": ["3"],
         "contexto_pagina": ["1"],
@@ -388,9 +370,9 @@ async def test_a_grid_the_portal_changed_is_schema_drift(
     harness: Harness, failure: Failure, options: SimOptions, where: str
 ) -> None:
     harness.sim.options = options
-    student = parse_student_id(student_of("Mateo"))
+    gateway, student = harness.guardian_of("Mateo")
 
-    detail = await failure(harness.gateway().call(lambda tx: read_absences(tx, student)))
+    detail = await failure(gateway.call(lambda tx: read_absences(tx, student)))
 
     assert isinstance(detail, SchemaDrift)
     assert detail.where == where

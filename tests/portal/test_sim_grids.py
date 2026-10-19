@@ -14,7 +14,7 @@ from urllib.parse import urlencode
 import pytest
 
 from alexia_api.portal.session import PortalRequest, PortalResponse, Tx
-from alexia_api.sim import absences
+from alexia_api.sim import absences, meetings
 from alexia_api.sim.app import HOME_PATH, LOGON_PATH
 from alexia_api.sim.grids import SimGrid, page_url
 from alexia_api.sim.world import DEMO_USER_A, synthetic_guid
@@ -50,7 +50,23 @@ CASES = [
             ),
         ),
         id="absences",
-    )
+    ),
+    pytest.param(
+        GridCase(
+            grid=meetings.GRID,
+            field="meetings",
+            filled=LUCIA,
+            empty=MATEO,
+            sample=meetings.SimMeeting(
+                id=synthetic_guid(0x7399),
+                state="Aceptada",
+                held_on=(10, 1),
+                staff="Ana Muestra Tutora",
+                requester="Marta Ejemplo",
+            ),
+        ),
+        id="meetings",
+    ),
 ]
 
 BROKEN_PAGES: dict[str, dict[str, str | None]] = {

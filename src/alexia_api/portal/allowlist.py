@@ -60,6 +60,20 @@ GET_ROSTER = WsCall(
     wire.RosterParams,
     TypeAdapter(list[wire.RosterItem]),
 )
+GET_AVAILABLE_DAYS = WsCall(
+    "WSReuniones",
+    "GetFechasDisponibles",
+    "read",
+    wire.AvailableDaysParams,
+    _adapter(wire.AvailableDaysReply),
+)
+GET_AVAILABLE_HOURS = WsCall(
+    "WSReuniones",
+    "GetHorasByFecha",
+    "read",
+    wire.AvailableHoursParams,
+    _adapter(wire.AvailableHoursReply),
+)
 GET_FOLDER_TREE = WsCall(
     "WSComunicados",
     "GetArbolCarpetasJSON",
@@ -89,6 +103,8 @@ _ENTRIES: Final[tuple[WsCall[Any, Any], ...]] = (
     CHECK_SESSION,
     GET_TRACKING,
     GET_ROSTER,
+    GET_AVAILABLE_DAYS,
+    GET_AVAILABLE_HOURS,
     GET_FOLDER_TREE,
     SELECT_FOLDER,
     GET_MESSAGE_DATA,
