@@ -31,10 +31,14 @@ def clean_name(name: str) -> str:
 
 
 def _plain_ascii(name: str) -> str:
-    """A name for the old clients that read no other form. Accents drop, other letters become _."""
+    """A name for the old clients that read no other form. Accents drop, other letters become _.
+
+    Dropping accents can leave a space or a dot at an end, or leave nothing, for example when a
+    name is only a mark. The ends are trimmed again and an empty name becomes `file`.
+    """
     decomposed = unicodedata.normalize("NFKD", name)
     unmarked = "".join(char for char in decomposed if not unicodedata.combining(char))
-    return _NOT_PLAIN_ASCII.sub("_", unmarked)
+    return _NOT_PLAIN_ASCII.sub("_", unmarked).strip(" .") or FALLBACK_NAME
 
 
 def content_disposition(name: str) -> str:

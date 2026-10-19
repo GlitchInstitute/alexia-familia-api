@@ -88,6 +88,9 @@ def test_a_cut_that_lands_on_a_space_or_a_dot_does_not_leave_it_at_the_start(mar
         ("  informe.pdf  ", "informe.pdf"),
         ("\uff21\uff22.pdf", "AB.pdf"),
         ("文件.pdf", "__.pdf"),
+        ("\U0001d242", FALLBACK_NAME),
+        ("\u0301.pdf", "pdf"),
+        ("a.\u0301", "a"),
         ('a"b.pdf', "a_b.pdf"),
         ("a;b=c.pdf", "a_b_c.pdf"),
         ("100%.pdf", "100_.pdf"),
@@ -117,6 +120,7 @@ def test_any_name_gives_a_one_line_ascii_header_that_names_the_cleaned_file(name
     assert header.isprintable()
     assert match is not None
     assert unquote(match.group(2)) == clean_name(name)
+    assert match.group(1) == match.group(1).strip(" .")
 
 
 @given(st.text(max_size=300))
