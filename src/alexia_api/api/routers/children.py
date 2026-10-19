@@ -68,7 +68,8 @@ async def get_tracking(
     summary="List the staff a guardian can meet about a child",
     description=(
         "Needs the `read` scope. These are the teachers and other staff the portal offers for "
-        "a meeting request. Each one has an id that meeting requests use."
+        "a meeting request. Use the id of a person to ask when that person has a free hour, "
+        "with the routes under `staff/{staff}/availability`."
     ),
     responses=CACHE_HEADERS,
 )

@@ -232,6 +232,17 @@ class CacheTtls(Model):
     absences: float = Field(
         default=600, ge=0, description="Seconds to reuse the absences the portal lists for a child."
     )
+    meetings: float = Field(
+        default=300, ge=0, description="Seconds to reuse the meetings the portal lists for a child."
+    )
+    availability: float = Field(
+        default=60,
+        ge=0,
+        description=(
+            "Seconds to reuse the free days and hours of a member of the staff. These change as "
+            "other guardians book, so the default is short."
+        ),
+    )
 
 
 def _split_list(value: object) -> object:

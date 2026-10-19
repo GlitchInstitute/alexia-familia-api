@@ -28,6 +28,9 @@ Every route lives at the address of your server, for example `http://127.0.0.1:8
 | GET | `/v1/accounts/{account}/children/{child}/tracking` | [Show the tracking counters of a child](#show-the-tracking-counters-of-a-child) |
 | GET | `/v1/accounts/{account}/children/{child}/staff` | [List the staff a guardian can meet about a child](#list-the-staff-a-guardian-can-meet-about-a-child) |
 | GET | `/v1/accounts/{account}/children/{child}/absences` | [List the absences of a child](#list-the-absences-of-a-child) |
+| GET | `/v1/accounts/{account}/children/{child}/meetings` | [List the meetings of a child](#list-the-meetings-of-a-child) |
+| GET | `/v1/accounts/{account}/children/{child}/staff/{staff}/availability` | [List the days on which a member of the staff has a free hour](#list-the-days-on-which-a-member-of-the-staff-has-a-free-hour) |
+| GET | `/v1/accounts/{account}/children/{child}/staff/{staff}/availability/{day}` | [List the free slots of a member of the staff on one day](#list-the-free-slots-of-a-member-of-the-staff-on-one-day) |
 | GET | `/v1/accounts/{account}/children/{child}/agenda` | [Show the agenda of a child](#show-the-agenda-of-a-child) |
 | GET | `/v1/accounts/{account}/guardian/agenda` | [Show the agenda of the guardian](#show-the-agenda-of-the-guardian) |
 | GET | `/v1/accounts/{account}/children/{child}/agenda.ics` | [Subscribe to the calendar of a child](#subscribe-to-the-calendar-of-a-child) |
@@ -261,7 +264,7 @@ A failure answers `401`, `403`, `404`, `422`, `429`, `500`, `502`, `503`, or `50
 
 `GET /v1/accounts/{account}/children/{child}/staff`
 
-Needs the `read` scope. These are the teachers and other staff the portal offers for a meeting request. Each one has an id that meeting requests use.
+Needs the `read` scope. These are the teachers and other staff the portal offers for a meeting request. Use the id of a person to ask when that person has a free hour, with the routes under `staff/{staff}/availability`.
 
 **Key.** Send one as `Authorization: Bearer <key>` or `X-API-Key: <key>`.
 
@@ -511,6 +514,116 @@ The `200` answer carries these headers.
 
 A failure answers `401`, `403`, `404`, `422`, `429`, `500`, `502`, `503`, or `504` with a [Problem](#problem) as `application/problem+json`. The [errors page](errors.md) lists every `code`.
 
+## Routes for meetings
+
+The meetings of a child with the school, and the days and hours that a member of the staff has free for a new one.
+
+### List the meetings of a child
+
+`GET /v1/accounts/{account}/children/{child}/meetings`
+
+Needs the `read` scope. This is the list on the portal's page of meetings for the child, in the order the meetings take place, oldest first. Each meeting has a `state`, which this server reads from the word the portal prints, and that word in `state_label`. Only the word `Aceptada` has been seen on a real list. A word that this server does not know reads as `unknown`, so branch on `state_label` for those. A meeting that a school holds for a whole group has been seen with the start 00:00 and the time of day in `note`. A time has the offset the school has on that day. This server only reads the list. Asking for a meeting, answering one, and cancelling one happen in the portal. A row that is worded in a way the server does not know fails with `portal_changed`.
+
+**Key.** Send one as `Authorization: Bearer <key>` or `X-API-Key: <key>`.
+
+**Path parameters**
+
+| Name | Kind | What it is |
+| --- | --- | --- |
+| `account` | text | The account's name, as the operator wrote it in the settings. |
+| `child` | text | A student id, or the child's slug as the list of children shows it. Letter case does not matter. |
+
+**Query parameters**
+
+| Name | Kind | Default | What it does |
+| --- | --- | --- | --- |
+| `fresh` | true or false | `false` | Ignore the stored answer and ask the portal again. The server still paces its requests, so use this when you know something changed and not on a timer. |
+
+**Answers**
+
+- `200` returns [MeetingList](#meetinglist) as `application/json`.
+
+The `200` answer carries these headers.
+
+| Header | What it says |
+| --- | --- |
+| `X-Cache` | `hit` when the answer was stored, `miss` when it was just read from the portal, `bypass` when `fresh=true` forced a new read. |
+| `Age` | How many seconds old the answer is. |
+
+A failure answers `401`, `403`, `404`, `422`, `429`, `500`, `502`, `503`, or `504` with a [Problem](#problem) as `application/problem+json`. The [errors page](errors.md) lists every `code`.
+
+### List the days on which a member of the staff has a free hour
+
+`GET /v1/accounts/{account}/children/{child}/staff/{staff}/availability`
+
+Needs the `read` scope. Gives the days of one month on which a member of the staff has at least one free hour for a meeting, earliest first and each day once. `staff` is an id from the staff list of the same child, and any other id is a 404 with the code `staff_not_found`. `month` is written YYYY-MM and defaults to the current month at the school. A month that starts more than 1100 days from today is refused with the code `invalid_window`. The answer belongs to the person, so two children who share a teacher share the stored answer. It is kept for a minute by default, because other guardians book hours too, and `fresh=true` reads it again. An empty list means that nothing is free in that month. This server only reads the hours. Asking for a meeting happens in the portal.
+
+**Key.** Send one as `Authorization: Bearer <key>` or `X-API-Key: <key>`.
+
+**Path parameters**
+
+| Name | Kind | What it is |
+| --- | --- | --- |
+| `staff` | text | The id of a member of the staff, as the staff list of the same child shows it. Letter case does not matter. |
+| `account` | text | The account's name, as the operator wrote it in the settings. |
+| `child` | text | A student id, or the child's slug as the list of children shows it. Letter case does not matter. |
+
+**Query parameters**
+
+| Name | Kind | Default | What it does |
+| --- | --- | --- | --- |
+| `month` | text or null | none | The month to look at, written YYYY-MM. The default is the current month at the school. The month must start within 1100 days of today. |
+| `fresh` | true or false | `false` | Ignore the stored answer and ask the portal again. The server still paces its requests, so use this when you know something changed and not on a timer. |
+
+**Answers**
+
+- `200` returns [AvailableDays](#availabledays) as `application/json`.
+
+The `200` answer carries these headers.
+
+| Header | What it says |
+| --- | --- |
+| `X-Cache` | `hit` when the answer was stored, `miss` when it was just read from the portal, `bypass` when `fresh=true` forced a new read. |
+| `Age` | How many seconds old the answer is. |
+
+A failure answers `401`, `403`, `404`, `422`, `429`, `500`, `502`, `503`, or `504` with a [Problem](#problem) as `application/problem+json`. The [errors page](errors.md) lists every `code`.
+
+### List the free slots of a member of the staff on one day
+
+`GET /v1/accounts/{account}/children/{child}/staff/{staff}/availability/{day}`
+
+Needs the `read` scope. Gives the free slots of a member of the staff on one day, earliest first, each with a start and an end that carry the school's offset. `staff` and the way the answer is kept work as they do for the days of a month. `day` is written YYYY-MM-DD, and a day more than 1100 days from today is refused with the code `invalid_window`. An empty list means that nothing is free on that day. This server only reads the hours. Asking for a meeting happens in the portal.
+
+**Key.** Send one as `Authorization: Bearer <key>` or `X-API-Key: <key>`.
+
+**Path parameters**
+
+| Name | Kind | What it is |
+| --- | --- | --- |
+| `staff` | text | The id of a member of the staff, as the staff list of the same child shows it. Letter case does not matter. |
+| `day` | date, written `YYYY-MM-DD` | The day to look at, written YYYY-MM-DD. |
+| `account` | text | The account's name, as the operator wrote it in the settings. |
+| `child` | text | A student id, or the child's slug as the list of children shows it. Letter case does not matter. |
+
+**Query parameters**
+
+| Name | Kind | Default | What it does |
+| --- | --- | --- | --- |
+| `fresh` | true or false | `false` | Ignore the stored answer and ask the portal again. The server still paces its requests, so use this when you know something changed and not on a timer. |
+
+**Answers**
+
+- `200` returns [AvailableHours](#availablehours) as `application/json`.
+
+The `200` answer carries these headers.
+
+| Header | What it says |
+| --- | --- |
+| `X-Cache` | `hit` when the answer was stored, `miss` when it was just read from the portal, `bypass` when `fresh=true` forced a new read. |
+| `Age` | How many seconds old the answer is. |
+
+A failure answers `401`, `403`, `404`, `422`, `429`, `500`, `502`, `503`, or `504` with a [Problem](#problem) as `application/problem+json`. The [errors page](errors.md) lists every `code`.
+
 ## Routes for messages
 
 The message folders of an account and the messages in them.
@@ -740,6 +853,33 @@ A file that came with a message.
 | `name` | text | The file's name as the sender gave it. |
 | `size` | whole number, at least 0 | The file's size in bytes, as the portal lists it. |
 
+### AvailableDays
+
+The days of one month on which a member of the staff has a free hour.
+
+| Field | Kind | What it says |
+| --- | --- | --- |
+| `month` | text | The month the list is for, written YYYY-MM. It is the current month at the school when the request named none. |
+| `items` | list of date, written `YYYY-MM-DD` | The days with at least one free hour, earliest first, each day once. Empty when nothing is free in that month. |
+
+### AvailableHours
+
+The free slots of one member of the staff on one day.
+
+| Field | Kind | What it says |
+| --- | --- | --- |
+| `day` | date, written `YYYY-MM-DD` | The day the list is for. |
+| `items` | list of [AvailableSlot](#availableslot) | The free slots, earliest first. Empty when nothing is free on that day. |
+
+### AvailableSlot
+
+A stretch of time that a member of the staff offers for a meeting.
+
+| Field | Kind | What it says |
+| --- | --- | --- |
+| `starts_at` | date and time with an offset | When the slot starts, with the school's offset. |
+| `ends_at` | date and time with an offset | When the slot ends, with the school's offset. |
+
 ### Blocked
 
 Automatic logins are paused until an operator resets the block.
@@ -895,6 +1035,28 @@ No session is open. The next request that needs the portal logs in first.
 | Field | Kind | What it says |
 | --- | --- | --- |
 | `state` | `"logged_out"` |  |
+
+### Meeting
+
+A meeting about one child that the portal lists, past, planned, or asked for.
+
+| Field | Kind | What it says |
+| --- | --- | --- |
+| `id` | text | The portal's meeting id. |
+| `state` | one of `"requested"`, `"accepted"`, `"cancelled"`, `"declined"`, `"done"`, `"unknown"` | Where the meeting stands. `requested` waits for an answer, `accepted` is agreed, `cancelled` and `declined` will not take place, and `done` took place. `unknown` means that the portal used a word this server does not know, so read `state_label`. |
+| `state_label` | text | The portal's own word for the state, such as `Aceptada`, as it prints it. |
+| `starts_at` | date and time with an offset | When the meeting starts, with the school's offset. A meeting held for a whole group can show 00:00 here and put the time of day in `note`. |
+| `requested_by` | text or null | Who asked for the meeting, as the portal prints it, or null. |
+| `staff` | text or null | The person at the school who is responsible for the meeting, or null. |
+| `note` | text or null | The note of the meeting, or null when there is none. |
+
+### MeetingList
+
+The meetings the portal lists for one child, in the order they take place.
+
+| Field | Kind | What it says |
+| --- | --- | --- |
+| `items` | list of [Meeting](#meeting) |  |
 
 ### Message
 

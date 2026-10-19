@@ -66,6 +66,9 @@ async def test_the_operation_ids_read_well_in_a_generated_client(api: Api) -> No
         "list_children",
         "get_tracking",
         "list_absences",
+        "list_meetings",
+        "list_available_days",
+        "list_available_hours",
         "check_connection",
         "list_folders",
         "list_messages",
@@ -160,6 +163,9 @@ async def test_cached_reads_document_their_cache_headers(api: Api) -> None:
         "/v1/accounts/{account}/children/{child}/tracking",
         "/v1/accounts/{account}/children/{child}/staff",
         "/v1/accounts/{account}/children/{child}/absences",
+        "/v1/accounts/{account}/children/{child}/meetings",
+        "/v1/accounts/{account}/children/{child}/staff/{staff}/availability",
+        "/v1/accounts/{account}/children/{child}/staff/{staff}/availability/{day}",
         "/v1/accounts/{account}/children/{child}/agenda",
         "/v1/accounts/{account}/guardian/agenda",
         "/v1/accounts/{account}/children/{child}/agenda.ics",
@@ -237,6 +243,36 @@ async def test_the_absences_route_documents_what_the_list_can_and_cannot_tell(ap
     )
     assert "does not prove" in operation["description"]
     assert "portal_changed" in operation["description"]
+
+
+async def test_the_meetings_route_documents_which_words_it_knows(api: Api) -> None:
+    path = "/v1/accounts/{account}/children/{child}/meetings"
+    operation = (await schema_of(api))["paths"][path]["get"]
+
+    assert {"account", "child", "fresh"} == {item["name"] for item in operation["parameters"]}
+    assert "`unknown`" in operation["description"]
+    assert "`state_label`" in operation["description"]
+    assert "portal_changed" in operation["description"]
+
+
+async def test_the_availability_routes_document_their_parameters_and_refusals(api: Api) -> None:
+    paths = (await schema_of(api))["paths"]
+    prefix = "/v1/accounts/{account}/children/{child}/staff/{staff}/availability"
+    days, hours = paths[prefix]["get"], paths[f"{prefix}/{{day}}"]["get"]
+
+    day_names = {item["name"] for item in days["parameters"]}
+    hour_names = {item["name"] for item in hours["parameters"]}
+    assert day_names == {"account", "child", "staff", "month", "fresh"}
+    assert hour_names == {"account", "child", "staff", "day", "fresh"}
+    month = next(item for item in days["parameters"] if item["name"] == "month")
+    assert "pattern" in json.dumps(month["schema"])
+    for operation in (days, hours):
+        assert {"401", "403", "404", "422", "429", "500", "502", "503", "504"} <= set(
+            operation["responses"]
+        )
+        assert "invalid_window" in operation["description"]
+        assert "1100 days" in operation["description"]
+    assert "staff_not_found" in days["description"]
 
 
 async def test_the_guardian_agenda_documents_the_login_that_has_no_guardian(api: Api) -> None:

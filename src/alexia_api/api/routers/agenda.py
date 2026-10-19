@@ -11,11 +11,13 @@ from alexia_api.api.errors import ApiError, problem_responses
 from alexia_api.api.ics import MEDIA_TYPE, CalendarSource, calendar_entries, render_calendar
 from alexia_api.api.params import (
     CACHE_HEADERS,
+    MAX_DISTANCE_DAYS,
     FeedAccount,
     FeedChild,
     FoundChild,
     FreshQuery,
     ReadAccount,
+    require_near,
     stamp,
 )
 from alexia_api.api.schemas import Agenda
@@ -27,7 +29,6 @@ from alexia_api.services.cache import Cached, combine
 
 DEFAULT_DAYS: Final = 7
 MAX_DAYS: Final = 366
-MAX_DISTANCE_DAYS: Final = 1100
 FEED_BACK_DAYS: Final = 14
 FEED_AHEAD_DAYS: Final = 180
 FEED_LESSON_DAYS: Final = 90
@@ -111,16 +112,10 @@ FEED_NOTE: Final = (
 def resolve_window(today: date, first: date | None, last: date | None) -> DateWindow:
     """The range a request asks for, or a refusal that says what to change.
 
-    A range far from today is refused as well as a long one. The portal has nothing to say about
-    the year 1, and a request for it would only cost the portal a call.
+    A range far from today is refused as well as a long one.
     """
     start = today if first is None else first
-    if abs((start - today).days) > MAX_DISTANCE_DAYS:
-        raise ApiError(
-            422,
-            "invalid_window",
-            f"from must be within {MAX_DISTANCE_DAYS} days of today, which is {today.isoformat()}",
-        )
+    require_near("from", start, today)
     end = start + timedelta(days=DEFAULT_DAYS - 1) if last is None else last
     if end < start:
         raise ApiError(422, "invalid_window", "to must not be before from")

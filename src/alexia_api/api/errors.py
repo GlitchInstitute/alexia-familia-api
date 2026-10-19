@@ -289,6 +289,12 @@ async def _not_found(request: Request, error: NotFoundError) -> Response:
                 "the portal did not list a guardian for this login, so there is no guardian "
                 "agenda to read, and the children's agendas are still available"
             )
+        case "staff":
+            detail = (
+                f"no member of the staff '{reference}' for this child, use an id from the staff "
+                "list of the same child, and ask for that list with fresh=true if a teacher was "
+                "added lately"
+            )
         case "message":
             detail = (
                 f"no message '{reference}' in this folder, use an id from the list of messages of "

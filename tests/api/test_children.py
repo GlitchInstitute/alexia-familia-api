@@ -179,6 +179,9 @@ async def test_a_session_the_portal_dropped_is_replaced_without_the_client_notic
         f"{CHILDREN}/lucia/tracking",
         f"{CHILDREN}/lucia/staff",
         f"{CHILDREN}/mateo/absences",
+        f"{CHILDREN}/mateo/meetings",
+        f"{CHILDREN}/mateo/staff/{synthetic_guid(0x604)}/availability",
+        f"{CHILDREN}/mateo/staff/{synthetic_guid(0x604)}/availability/2026-01-06",
     ],
 )
 async def test_every_child_route_says_503_for_a_blocked_account(

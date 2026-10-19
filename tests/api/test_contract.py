@@ -10,31 +10,18 @@ from typing import Any
 
 import httpx
 import pytest
-from openapi_schema_validator import OAS31Validator
-from referencing import Registry, Resource
-from referencing.jsonschema import DRAFT202012
 
-from alexia_api.api.app import openapi_document
+from alexia_api.sim.world import synthetic_guid
 from tests.api.support import Api, bearer
+from tests.openapi_reply import DOCUMENT, validate_against_model
 
-DOCUMENT_URI = "urn:alexia-api:openapi"
 JSON_MEDIA_TYPES = {"application/json", "application/problem+json"}
-DOCUMENT = openapi_document()
 OPERATIONS = [
     (method, path)
     for path, item in DOCUMENT["paths"].items()
     for method in item
     if method in {"get", "post", "put", "patch", "delete"}
 ]
-
-
-def validate_against_model(body: object, schema: dict[str, Any]) -> None:
-    """Check a body against a schema of the document. A `$ref` finds its model in the document."""
-    registry: Registry[Any] = Registry().with_resource(
-        DOCUMENT_URI, Resource.from_contents(DOCUMENT, default_specification=DRAFT202012)
-    )
-    reference = {"$ref": f"{DOCUMENT_URI}#{schema['$ref'].removeprefix('#')}"}
-    OAS31Validator(reference, registry=registry).validate(body)
 
 
 async def concrete_values(api: Api) -> dict[str, str]:
@@ -45,6 +32,8 @@ async def concrete_values(api: Api) -> dict[str, str]:
     return {
         "account": "marta",
         "child": "mateo",
+        "staff": synthetic_guid(0x604),
+        "day": "2026-01-06",
         "message": with_file,
         "attachment": message["attachments"][0]["id"],
     }

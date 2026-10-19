@@ -103,6 +103,16 @@ The server reuses the list of children for 15 minutes. Ask for `GET /v1/accounts
 - `from` and `to` are days at the school, and both count. Check that they are in the order you meant.
 - Ask again with `fresh=true` if the school changed something a moment ago.
 
+### A meeting shows the state `unknown`
+
+The server reads the state from the word that the portal prints. It knows words for five states, and only `Aceptada` has been seen on a real list. Read `state_label` for the portal's own word. Open an issue with that word and nothing else, and the reader can learn it. The [protocol notes](protocol.md#meetings) list the stems that the reader matches.
+
+### A teacher is not found, or has no free hours
+
+- `staff_not_found` means that the id is not on the staff list of that child. Read `GET /v1/accounts/{account}/children/{child}/staff` and use an id from it. A teacher of a sibling does not count. Ask for the list with `fresh=true` when a teacher was added lately.
+- An empty list means that the portal reports nothing free. The school sets the free hours, and a teacher can have none in a month. Ask for the next month with `month=YYYY-MM`.
+- The answer is kept for a minute. Add `fresh=true` when you know that an hour was freed.
+
 ### The message list is shorter than the portal's
 
 The list comes a page at a time. Follow `next_offset` until it is null. `truncated` is true when the folder is longer than the server reads, and then the oldest messages are left out.

@@ -5,6 +5,7 @@ not be used to find out which accounts a server holds.
 """
 
 from collections.abc import Awaitable, Callable
+from datetime import date
 from functools import cache
 from typing import Annotated, Any, Final
 
@@ -12,6 +13,7 @@ from fastapi import Depends, Path, Query, Request, Response
 
 from alexia_api.api.auth import require, require_feed
 from alexia_api.api.deps import ServicesDep
+from alexia_api.api.errors import ApiError
 from alexia_api.domain.children import Child
 from alexia_api.domain.security import Principal, Scope
 from alexia_api.services.cache import Cached
@@ -101,6 +103,24 @@ AdminAccount = Annotated[AccountRuntime, Depends(account_for("admin"))]
 FeedAccount = Annotated[AccountRuntime, Depends(_feed_account)]
 FoundChild = Annotated[Cached[Child], Depends(_child_of(account_for("read")))]
 FeedChild = Annotated[Cached[Child], Depends(_child_of(_feed_account))]
+
+
+MAX_DISTANCE_DAYS: Final = 1100
+
+
+def require_near(name: str, day: date, today: date) -> None:
+    """Refuse a day that lies far from today, naming the parameter that holds it.
+
+    The portal has nothing to say about the year 1, and a request for it would only cost the
+    portal a call.
+    """
+    if abs((day - today).days) > MAX_DISTANCE_DAYS:
+        raise ApiError(
+            422,
+            "invalid_window",
+            f"{name} must be within {MAX_DISTANCE_DAYS} days of today, "
+            f"which is {today.isoformat()}",
+        )
 
 
 def stamp(response: Response, cached: Cached[Any]) -> None:

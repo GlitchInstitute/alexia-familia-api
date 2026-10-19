@@ -1,8 +1,10 @@
 """Reading the meetings of a child."""
 
 import json
+import re
 from collections.abc import Mapping
 from datetime import datetime, timedelta
+from pathlib import Path
 from urllib.parse import parse_qs
 from zoneinfo import ZoneInfo
 
@@ -15,6 +17,7 @@ from alexia_api.portal.grid import GridRow, read_grid_text
 from alexia_api.portal.meetings import (
     MEETING_CELLS,
     MEETINGS_GRID,
+    STATE_STEMS,
     parse_meeting_row,
     parse_meetings,
     read_meetings,
@@ -24,6 +27,7 @@ from alexia_api.sim.app import SimOptions
 from alexia_api.sim.world import synthetic_guid
 from tests.harness import Failure, Harness
 
+PROTOCOL_NOTES = Path(__file__).resolve().parents[2] / "docs" / "protocol.md"
 MADRID = ZoneInfo("Europe/Madrid")
 BOGOTA = ZoneInfo("America/Bogota")
 GUID = synthetic_guid(0x7301)
@@ -178,6 +182,16 @@ def test_every_state_of_the_model_can_be_read_from_a_label() -> None:
     labels = ["Aceptada", "Cancelada", "Rechazada", "Realizada", "Solicitada", "Algo nuevo"]
 
     assert {state_of(label) for label in labels} == set(MEETING_STATES)
+
+
+def test_the_protocol_notes_list_the_stems_in_the_order_that_the_reader_checks_them() -> None:
+    notes = PROTOCOL_NOTES.read_text(encoding="utf-8")
+    rows = re.findall(r"^\| `([a-z]+)` \| ((?:`[a-z]+`(?:, )?)+) \|$", notes, re.MULTILINE)
+    documented = [(state, re.findall(r"`([a-z]+)`", stems)) for state, stems in rows]
+
+    in_code = [(state, re.findall(r"[a-z]+", pattern.pattern)) for pattern, state in STATE_STEMS]
+
+    assert documented == in_code
 
 
 @pytest.mark.parametrize(

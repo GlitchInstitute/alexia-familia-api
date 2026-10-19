@@ -18,7 +18,7 @@ A login at the portal holds all the children of a family, so an address names th
 | --- | --- | --- |
 | Server | `/`, `/healthz`, `/readyz` | Where things are, and whether the server is up. These need no key. |
 | Accounts | `/v1/accounts`, `/v1/accounts/{account}` | The portal logins this server holds, and the state of each. |
-| Children | `/v1/accounts/{account}/children/{child}/...` | What belongs to one child, such as the tracking counters, the staff, the absences, and the agenda. |
+| Children | `/v1/accounts/{account}/children/{child}/...` | What belongs to one child, such as the tracking counters, the staff, the absences, the meetings, and the agenda. |
 | Guardian | `/v1/accounts/{account}/guardian/agenda` | The interviews and school events of the parent or guardian. |
 | Messages | `/v1/accounts/{account}/messages` and `/folders` | The inbox. It belongs to the login and not to a child, so it sits under the account. |
 | Calendars | `.../agenda.ics` | Calendar files for one child, for the guardian, or for the whole family. |
@@ -58,7 +58,7 @@ The agenda routes take `from` and `to`. Both days count, so `from=2026-10-19&to=
 | --- | --- |
 | Default range | Today and the six days after it. |
 | Longest range | 366 days. |
-| Furthest from today | `from` may lie up to 1100 days before or after today. |
+| Furthest from today | `from` may lie up to 1100 days before or after today. The month and the day of the [free hours](#free-hours-of-the-staff) follow the same rule. |
 
 A range that breaks a rule gets the problem `invalid_window`, and the `detail` says what to change.
 
@@ -71,7 +71,7 @@ The `kind` parameter keeps some kinds of entries. Repeat it to keep several, as 
 
 ## Lists and pages
 
-Most lists come whole, wrapped in an object with an `items` list. That holds for the accounts, the children, the staff, the absences, and the folders. The agenda also says which days it covers, with `from` and `to`.
+Most lists come whole, wrapped in an object with an `items` list. That holds for the accounts, the children, the staff, the absences, the meetings, and the folders. The agenda also says which days it covers, with `from` and `to`. The free hours of the staff say which month or day they cover, with `month` or `day`.
 
 Only the list of messages comes a page at a time, because an inbox can be long.
 
@@ -118,6 +118,10 @@ The answer says where you are.
 
 Follow `next_offset` until it is `null`. Do not add up the page sizes yourself.
 
+The server reads a whole folder from the portal once and keeps it for a short time, so paging through a folder costs the portal a single read. The portal serves 50 messages at a time and the server reads at most 200 such pages. A normal inbox needs a few requests. The first read of a very long folder takes a while, because the server pauses between its requests to the portal.
+
+The `read` field is `true`, `false`, or `null` when the portal does not say. The portal may mark a message as read when it opens, and this server cannot tell whether it does. The `read` field shows the state from the list, which is the state from before you opened the message.
+
 ## Absences
 
 `GET /v1/accounts/{account}/children/{child}/absences` lists the absences and the other attendance incidents that the portal records for one child, newest day first. A late arrival sits in the same list, and `incident` says which kind a row is.
@@ -154,9 +158,94 @@ Follow `next_offset` until it is `null`. Do not add up the page sizes yourself.
 
 The portal's page lists the days from the first day of the current month to today. An older absence can be missing, so an empty list does not prove that a child has none. The server only reads the list, and a guardian justifies an absence in the portal. No real list has been read yet, so the [protocol notes](protocol.md#absences) label the cell formats as read from the portal's script and not as seen.
 
-The server reads a whole folder from the portal once and keeps it for a short time, so paging through a folder costs the portal a single read. The portal serves 50 messages at a time and the server reads at most 200 such pages. A normal inbox needs a few requests. The first read of a very long folder takes a while, because the server pauses between its requests to the portal.
+## Meetings
 
-The `read` field is `true`, `false`, or `null` when the portal does not say. The portal may mark a message as read when it opens, and this server cannot tell whether it does. The `read` field shows the state from the list, which is the state from before you opened the message.
+`GET /v1/accounts/{account}/children/{child}/meetings` lists the meetings that the portal shows for one child, in the order they take place, oldest first. A meeting can be past, planned, or only asked for.
+
+```json
+{
+  "items": [
+    {
+      "id": "5afe0000-0000-4000-8000-000000007301",
+      "state": "accepted",
+      "state_label": "Aceptada",
+      "starts_at": "2026-10-20T16:00:00+02:00",
+      "requested_by": "Marta Ejemplo",
+      "staff": "Ana Muestra Tutora",
+      "note": null
+    }
+  ]
+}
+```
+
+| Field | What it means |
+| --- | --- |
+| `state` | Where the meeting stands. It is `requested`, `accepted`, `cancelled`, `declined`, `done`, or `unknown`. |
+| `state_label` | The portal's own word for the state, such as `Aceptada`. |
+| `starts_at` | When the meeting starts, with the school's offset on that day. |
+| `requested_by` | Who asked for the meeting, as the portal prints it, or `null`. |
+| `staff` | The person at the school who is responsible for the meeting, or `null`. |
+| `note` | The note of the meeting, or `null`. |
+
+Only the word `Aceptada` has been seen on a real list. The server reads the other words from a table that nobody has checked against a real portal. A word that is not in the table gives the state `unknown`, so branch on `state_label` for those and tell the project about the word, so the table can learn it. A meeting that the school holds for a whole group can start at `00:00`, with the time of day in the `note`.
+
+The server only reads the list. A guardian asks for a meeting, answers one, or cancels one in the portal.
+
+## Free hours of the staff
+
+Two routes say when a member of the staff has an hour free for a meeting. Both take a person from the staff list of the same child, so read that list first. An id that is not on it gets a `404` with the code `staff_not_found`, and the server does not ask the portal.
+
+The first route gives the days of one month that have at least one free hour. `month` is written `YYYY-MM`, and the default is the current month at the school.
+
+```bash
+curl -H "Authorization: Bearer $KEY" \
+  "http://127.0.0.1:8000/v1/accounts/marta/children/mateo/staff/5afe0000-0000-4000-8000-000000000604/availability?month=2026-11"
+```
+
+```json
+{
+  "month": "2026-11",
+  "items": [
+    "2026-11-03",
+    "2026-11-05",
+    "2026-11-10",
+    "2026-11-12",
+    "2026-11-17",
+    "2026-11-19",
+    "2026-11-24",
+    "2026-11-26"
+  ]
+}
+```
+
+The second route gives the free hours of one day, each with a start and an end.
+
+```bash
+curl -H "Authorization: Bearer $KEY" \
+  "http://127.0.0.1:8000/v1/accounts/marta/children/mateo/staff/5afe0000-0000-4000-8000-000000000604/availability/2026-11-03"
+```
+
+```json
+{
+  "day": "2026-11-03",
+  "items": [
+    {
+      "starts_at": "2026-11-03T15:30:00+01:00",
+      "ends_at": "2026-11-03T16:00:00+01:00"
+    },
+    {
+      "starts_at": "2026-11-03T16:00:00+01:00",
+      "ends_at": "2026-11-03T16:30:00+01:00"
+    }
+  ]
+}
+```
+
+An empty `items` list means that nothing is free. A month or a day that lies more than 1100 days from today gets the problem `invalid_window`, which is the rule that the agenda uses too.
+
+The answer belongs to the person and not to the child, so two children who share a teacher share one stored answer. The server keeps it for a minute by default, because other guardians book hours too, and `fresh=true` reads it again. Which days a school offers is the school's rule and not this server's. The demo offers hours from tomorrow on, and a real school can differ.
+
+This server only reads the hours. A guardian asks for a meeting in the portal.
 
 ## How fresh an answer is
 

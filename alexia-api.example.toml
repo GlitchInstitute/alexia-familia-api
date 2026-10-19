@@ -93,6 +93,13 @@
 # Seconds to reuse the absences the portal lists for a child. It must be at least 0.
 # absences = 600
 
+# Seconds to reuse the meetings the portal lists for a child. It must be at least 0.
+# meetings = 300
+
+# Seconds to reuse the free days and hours of a member of the staff. These change as other
+# guardians book, so the default is short. It must be at least 0.
+# availability = 60
+
 # One block for each portal login. The name after "accounts." goes into URLs, so use lower
 # case letters, digits, and hyphens. One login lists all of a parent's children, so a
 # parent with two children needs a single block. Add another block for another parent's

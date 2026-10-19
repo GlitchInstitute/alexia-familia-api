@@ -37,7 +37,7 @@ MEETINGS_GRID: Final = GridSpec(
     order="asc",
 )
 
-_STATE_WORDS: Final[tuple[tuple[re.Pattern[str], MeetingState], ...]] = (
+STATE_STEMS: Final[tuple[tuple[re.Pattern[str], MeetingState], ...]] = (
     (re.compile(r"cancelad|anulad"), "cancelled"),
     (re.compile(r"rechazad|denegad"), "declined"),
     (re.compile(r"aceptad|confirmad"), "accepted"),
@@ -55,7 +55,7 @@ def state_of(label: str) -> MeetingState:
     reads as one that is still on.
     """
     lowered = label.lower()
-    for pattern, state in _STATE_WORDS:
+    for pattern, state in STATE_STEMS:
         if pattern.search(lowered):
             return state
     return "unknown"

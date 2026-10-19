@@ -19,11 +19,13 @@ from alexia_api.portal.inbox import Feed
 from alexia_api.services.errors import NotFoundError
 from alexia_api.services.registry import Directory, Registry
 from alexia_api.sim.world import DEMO_PASSWORD_B, DEMO_USER_A, DEMO_USER_B, synthetic_guid
-from tests.harness import A_NEW_MESSAGE, Failure, Harness
+from tests.harness import A_NEW_MESSAGE, Failure, Harness, teacher
 
 LUCIA = synthetic_guid(0x101)
 MATEO = synthetic_guid(0x102)
 HUGO = synthetic_guid(0x111)
+TUTOR_B = synthetic_guid(0x603)
+MUSIC = synthetic_guid(0x604)
 UNREAD = synthetic_guid(0x1001)
 WITH_FILE = synthetic_guid(0x1002)
 MESSAGE_DATA = "GetDatosPaginaComunicado"
@@ -288,6 +290,192 @@ async def test_a_fresh_look_at_absences_reads_the_portal_again(harness: Harness)
 
     assert again.status == "bypass"
     assert len(harness.sim.requests) == calls + 2
+
+
+async def test_meetings_are_read_for_the_child_asked_about(harness: Harness) -> None:
+    runtime = harness.registry().get("marta")
+    lucia = (await runtime.child("lucia")).value
+    mateo = (await runtime.child("mateo")).value
+
+    assert [meeting.id for meeting in (await runtime.meetings(lucia)).value] == [
+        synthetic_guid(number) for number in (0x7302, 0x7301, 0x7303)
+    ]
+    assert (await runtime.meetings(mateo)).value == ()
+
+
+async def test_meetings_are_cached_for_each_child_on_their_own(harness: Harness) -> None:
+    runtime = harness.registry().get("marta")
+    lucia = (await runtime.child("lucia")).value
+    mateo = (await runtime.child("mateo")).value
+    await runtime.meetings(lucia)
+    calls = len(harness.sim.requests)
+
+    again = await runtime.meetings(lucia)
+    other = await runtime.meetings(mateo)
+
+    assert (again.status, other.status) == ("hit", "miss")
+    assert len(harness.sim.requests) == calls + 2
+
+
+async def test_meetings_and_absences_of_a_child_are_kept_apart(harness: Harness) -> None:
+    runtime = harness.registry().get("marta")
+    mateo = (await runtime.child("mateo")).value
+    await runtime.absences(mateo)
+
+    assert (await runtime.meetings(mateo)).status == "miss"
+    assert (await runtime.absences(mateo)).status == "hit"
+
+
+async def test_a_fresh_look_at_meetings_reads_the_portal_again(harness: Harness) -> None:
+    runtime = harness.registry().get("marta")
+    lucia = (await runtime.child("lucia")).value
+    await runtime.meetings(lucia)
+    calls = len(harness.sim.requests)
+
+    again = await runtime.meetings(lucia, fresh=True)
+
+    assert again.status == "bypass"
+    assert len(harness.sim.requests) == calls + 2
+
+
+async def test_the_free_days_and_hours_are_read_for_a_person_on_the_staff_of_the_child(
+    harness: Harness,
+) -> None:
+    runtime = harness.registry().get("marta")
+    mateo = (await runtime.child("mateo")).value
+
+    days = (await runtime.available_days(mateo, MUSIC, 2026, 1)).value
+    slots = (await runtime.available_hours(mateo, MUSIC, date(2026, 1, 6))).value
+
+    assert (days[0], days[-1], len(days)) == (date(2026, 1, 6), date(2026, 1, 29), 8)
+    assert [(slot.starts_at.hour, slot.starts_at.minute) for slot in slots] == [(15, 30), (16, 0)]
+
+
+@pytest.mark.parametrize("reference", [synthetic_guid(0x999), "not-a-guid", "", "x" * 300])
+async def test_a_person_who_is_not_on_the_staff_of_the_child_is_not_found(
+    harness: Harness, reference: str
+) -> None:
+    runtime = harness.registry().get("marta")
+    mateo = (await runtime.child("mateo")).value
+
+    with pytest.raises(NotFoundError) as raised:
+        await runtime.available_days(mateo, reference, 2026, 1)
+    with pytest.raises(NotFoundError):
+        await runtime.available_hours(mateo, reference, date(2026, 1, 6))
+
+    assert (raised.value.kind, raised.value.reference) == ("staff", reference)
+
+
+async def test_a_teacher_of_a_sibling_is_not_found_for_this_child(harness: Harness) -> None:
+    runtime = harness.registry().get("marta")
+    lucia = (await runtime.child("lucia")).value
+
+    with pytest.raises(NotFoundError) as raised:
+        await runtime.available_days(lucia, MUSIC, 2026, 1)
+
+    assert raised.value.kind == "staff"
+
+
+async def test_an_unknown_person_costs_no_portal_call_once_the_staff_list_is_stored(
+    harness: Harness,
+) -> None:
+    runtime = harness.registry().get("marta")
+    mateo = (await runtime.child("mateo")).value
+    await runtime.staff(mateo)
+    calls = len(harness.sim.requests)
+
+    with pytest.raises(NotFoundError):
+        await runtime.available_days(mateo, synthetic_guid(0x999), 2026, 1)
+
+    assert len(harness.sim.requests) == calls
+
+
+async def test_the_id_of_a_person_may_be_written_in_capital_letters(harness: Harness) -> None:
+    runtime = harness.registry().get("marta")
+    mateo = (await runtime.child("mateo")).value
+
+    days = await runtime.available_days(mateo, MUSIC.upper(), 2026, 1)
+
+    assert len(days.value) == 8
+
+
+async def test_free_hours_are_stored_for_each_person_month_and_day_on_their_own(
+    harness: Harness,
+) -> None:
+    runtime = harness.registry().get("marta")
+    mateo = (await runtime.child("mateo")).value
+    await runtime.available_days(mateo, MUSIC, 2026, 1)
+    await runtime.available_hours(mateo, MUSIC, date(2026, 1, 6))
+
+    statuses = [
+        (await runtime.available_days(mateo, MUSIC, 2026, 1)).status,
+        (await runtime.available_hours(mateo, MUSIC, date(2026, 1, 6))).status,
+        (await runtime.available_days(mateo, MUSIC, 2026, 2)).status,
+        (await runtime.available_hours(mateo, MUSIC, date(2026, 1, 8))).status,
+        (await runtime.available_days(mateo, TUTOR_B, 2026, 1)).status,
+    ]
+
+    assert statuses == ["hit", "hit", "miss", "miss", "miss"]
+
+
+async def test_the_free_hours_of_one_person_are_shared_by_the_children_who_have_them(
+    harness: Harness,
+) -> None:
+    runtime = harness.registry().get("marta")
+    mateo = (await runtime.child("mateo")).value
+    lucia = (await runtime.child("lucia")).value
+    harness.revise_child(DEMO_USER_A, LUCIA, staff=(teacher(0x604),))
+    await runtime.available_days(mateo, MUSIC, 2026, 1)
+
+    shared = await runtime.available_days(lucia, MUSIC, 2026, 1)
+
+    assert shared.status == "hit"
+    assert harness.requests_to("GetFechasDisponibles") == 1
+
+
+async def test_a_fresh_look_at_free_hours_reads_them_again_and_not_the_staff_list(
+    harness: Harness,
+) -> None:
+    runtime = harness.registry().get("marta")
+    mateo = (await runtime.child("mateo")).value
+    await runtime.available_days(mateo, MUSIC, 2026, 1)
+
+    again = await runtime.available_days(mateo, MUSIC, 2026, 1, fresh=True)
+
+    assert again.status == "bypass"
+    assert harness.requests_to("GetFechasDisponibles") == 2
+    assert harness.requests_to("GetEmpleadosByHijo") == 1
+
+
+async def test_an_account_keeps_only_the_latest_answers_about_free_hours(
+    harness: Harness, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("alexia_api.services.registry.MAX_CACHED_AVAILABILITY", 2)
+    runtime = harness.registry().get("marta")
+    mateo = (await runtime.child("mateo")).value
+    months = [(2026, 1), (2026, 2), (2026, 3)]
+    for year, month in months:
+        await runtime.available_days(mateo, MUSIC, year, month)
+
+    statuses = [
+        (await runtime.available_days(mateo, MUSIC, year, month)).status
+        for year, month in reversed(months)
+    ]
+
+    assert statuses == ["hit", "hit", "miss"]
+
+
+async def test_a_run_of_odd_months_does_not_push_out_the_lists_of_the_account(
+    harness: Harness, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("alexia_api.services.registry.MAX_CACHED_AVAILABILITY", 1)
+    runtime = harness.registry().get("marta")
+    mateo = (await runtime.child("mateo")).value
+    for month in (1, 2, 3):
+        await runtime.available_days(mateo, MUSIC, 2026, month)
+
+    assert (await runtime.directory()).status == "hit"
+    assert (await runtime.staff(mateo)).status == "hit"
 
 
 async def test_the_agenda_of_a_child_holds_only_the_days_asked_for(harness: Harness) -> None:

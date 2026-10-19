@@ -16,7 +16,7 @@ from alexia_api.api.deps import Services
 from alexia_api.api.errors import install_handlers, refuse_host
 from alexia_api.api.middleware import ListedHosts, RequestContext
 from alexia_api.api.openapi import install_openapi
-from alexia_api.api.routers import absences, accounts, agenda, children, messages, meta
+from alexia_api.api.routers import absences, accounts, agenda, children, meetings, messages, meta
 from alexia_api.clock import Clock, SystemClock
 from alexia_api.config import Settings, find_config_file, load_settings
 from alexia_api.services.keys import FILE_NAME, ApiKeyStore
@@ -61,6 +61,13 @@ TAGS: Final = [
         ),
     },
     {
+        "name": "meetings",
+        "description": (
+            "The meetings of a child with the school, and the days and hours that a member of "
+            "the staff has free for a new one."
+        ),
+    },
+    {
         "name": "messages",
         "description": "The message folders of an account and the messages in them.",
     },
@@ -101,6 +108,7 @@ def _declare(lifespan: Lifespan[FastAPI] | None, pages: dict[str, Any]) -> FastA
     app.include_router(accounts.router)
     app.include_router(children.router)
     app.include_router(absences.router)
+    app.include_router(meetings.router)
     app.include_router(agenda.router)
     app.include_router(messages.router)
     install_openapi(app)

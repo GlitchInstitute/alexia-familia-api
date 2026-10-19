@@ -63,13 +63,14 @@ The status tells you who can fix the problem.
 | `account_not_found` | 404 | No account has this name, or the key may not use it. | List the accounts with `GET /v1/accounts`. |
 | `child_not_found` | 404 | No child on the account matches. | List the children, and use a student id or a slug from the list. Ask for the list with `fresh=true` if a sibling was added lately. |
 | `guardian_not_found` | 404 | The portal did not list a guardian for this login, so there is no guardian agenda. | Use the agenda of each child. |
+| `staff_not_found` | 404 | The staff list of the child has no such person. | Use an id from the staff list of the same child. Read that list with `fresh=true` if a teacher was added lately. |
 | `message_not_found` | 404 | The folder holds no such message. | Use an id from the list of the same folder, and read the list with `fresh=true` if the message arrived lately. |
 | `attachment_not_found` | 404 | The message has no such file. | Use an id from the `attachments` of the message. |
 | `not_found` | 404 | No route answers at this address. | Check the path against the [endpoint reference](endpoints.md). |
 | `method_not_allowed` | 405 | The route does not take this method. The `Allow` header lists the ones it takes. | Use one of them. |
 | `attachment_too_large` | 413 | A file is larger than the operator's `max_attachment_mib`, so the server did not fetch it. | Ask the operator to raise the limit, or open the message in the portal. |
 | `validation_error` | 422 | A parameter is missing or not valid. `errors` says which. | Fix each location that `errors` names. |
-| `invalid_window` | 422 | A date range is too long, too far from today, or ends before it starts. | Ask for a shorter range that lies within about three years of today. |
+| `invalid_window` | 422 | A date range is too long, too far from today, or ends before it starts. A month or a day asked for in the free hours of staff is too far from today. | Ask for a shorter range, or for days that lie within about three years of today. |
 
 ## When the account cannot be used
 

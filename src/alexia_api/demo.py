@@ -82,6 +82,14 @@ TOUR: Final = (
         "the absences and delays that the school recorded for one child",
     ),
     Suggestion(
+        "/v1/accounts/marta/children/lucia/meetings",
+        "the meetings that the school lists for one child",
+    ),
+    Suggestion(
+        f"/v1/accounts/marta/children/mateo/staff/{synthetic_guid(0x604)}/availability",
+        "the days of this month on which a teacher has a free hour for a meeting",
+    ),
+    Suggestion(
         "/v1/accounts/marta/children/lucia/agenda",
         "the lessons and school events of one child for the coming week",
     ),

@@ -6,6 +6,7 @@ reach a student id that the portal did not list for that login, whatever id the 
 
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
+from datetime import date
 from typing import Final, Self
 
 import httpx
@@ -25,20 +26,24 @@ from alexia_api.domain.ids import (
     parse_attachment_id,
     parse_message_id,
     parse_role_id,
+    parse_staff_id,
 )
 from alexia_api.domain.media import Download
+from alexia_api.domain.meetings import AvailableSlot, Meeting
 from alexia_api.domain.messages import Folder, FolderName, Message, MessageSummary
 from alexia_api.domain.security import Principal
 from alexia_api.domain.time import DateWindow
 from alexia_api.portal.absences import read_absences
 from alexia_api.portal.agenda import read_agenda
 from alexia_api.portal.attachments import download_attachment
+from alexia_api.portal.availability import read_available_days, read_available_hours
 from alexia_api.portal.breaker import BREAKER_DIRECTORY, BreakerStore
 from alexia_api.portal.children import read_home
 from alexia_api.portal.folders import read_folder_tree
 from alexia_api.portal.gateway import CheckResult, Gateway
 from alexia_api.portal.inbox import Feed, read_feed
 from alexia_api.portal.login import PortalCredentials
+from alexia_api.portal.meetings import read_meetings
 from alexia_api.portal.message import read_message
 from alexia_api.portal.roster import read_roster
 from alexia_api.portal.session import Gates, PortalSession
@@ -56,6 +61,10 @@ MAX_CACHED_AGENDAS: Final = 16
 """How many ranges of an agenda an account keeps. A client can ask for any range, and a year of
 lessons holds about a thousand entries, so the ranges have a store of their own that a run of odd
 requests can fill without pushing out the list of children."""
+
+MAX_CACHED_AVAILABILITY: Final = 64
+"""How many answers about the free hours of staff an account keeps. A client picks the person,
+the month, and the day, so these answers have a store of their own, like the agendas."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,6 +87,7 @@ class AccountRuntime:
         cache: TtlCache,
         message_cache: TtlCache,
         agenda_cache: TtlCache,
+        availability_cache: TtlCache,
         ttls: CacheTtls,
         capabilities: Capabilities,
         max_attachment_bytes: int,
@@ -90,6 +100,7 @@ class AccountRuntime:
         self._cache = cache
         self._message_cache = message_cache
         self._agenda_cache = agenda_cache
+        self._availability_cache = availability_cache
         self._ttls = ttls
         self._capabilities = capabilities
         self._max_attachment_bytes = max_attachment_bytes
@@ -147,6 +158,60 @@ class AccountRuntime:
             ("absences", child.id),
             self._ttls.absences,
             lambda: self._gateway.call(lambda tx: read_absences(tx, child.id)),
+            fresh=fresh,
+        )
+
+    async def meetings(self, child: Child, *, fresh: bool = False) -> Cached[tuple[Meeting, ...]]:
+        """The meetings that the portal lists for one child, in the order they take place."""
+        return await self._cache.get(
+            ("meetings", child.id),
+            self._ttls.meetings,
+            lambda: self._gateway.call(lambda tx: read_meetings(tx, child.id)),
+            fresh=fresh,
+        )
+
+    async def _member_of(self, child: Child, reference: str) -> StaffMember:
+        """A person from the staff list of a child. Anyone else is not found without a request.
+
+        The list of the child decides whom a client may ask about, so a key cannot be used to ask
+        the portal about people who are not on it. A client that expects a new teacher reads the
+        list with `fresh` first.
+        """
+        try:
+            wanted = parse_staff_id(reference)
+        except InvalidIdError:
+            raise NotFoundError("staff", reference) from None
+        roster = await self.staff(child)
+        member = next((candidate for candidate in roster.value if candidate.id == wanted), None)
+        if member is None:
+            raise NotFoundError("staff", reference)
+        return member
+
+    async def available_days(
+        self, child: Child, staff: str, year: int, month: int, *, fresh: bool = False
+    ) -> Cached[tuple[date, ...]]:
+        """The days of a month on which a member of the staff of the child has a free hour.
+
+        The answer belongs to the person and not to the child, so two children of one account who
+        share a teacher share the stored answer.
+        """
+        member = await self._member_of(child, staff)
+        return await self._availability_cache.get(
+            ("days", member.id, f"{year:04d}-{month:02d}"),
+            self._ttls.availability,
+            lambda: self._gateway.call(lambda tx: read_available_days(tx, member.id, year, month)),
+            fresh=fresh,
+        )
+
+    async def available_hours(
+        self, child: Child, staff: str, day: date, *, fresh: bool = False
+    ) -> Cached[tuple[AvailableSlot, ...]]:
+        """The free slots of a member of the staff of the child on one day."""
+        member = await self._member_of(child, staff)
+        return await self._availability_cache.get(
+            ("hours", member.id, day.isoformat()),
+            self._ttls.availability,
+            lambda: self._gateway.call(lambda tx: read_available_hours(tx, member.id, day)),
             fresh=fresh,
         )
 
@@ -343,6 +408,7 @@ class Registry:
                     cache=TtlCache(clock),
                     message_cache=TtlCache(clock, max_entries=MAX_CACHED_MESSAGES),
                     agenda_cache=TtlCache(clock, max_entries=MAX_CACHED_AGENDAS),
+                    availability_cache=TtlCache(clock, max_entries=MAX_CACHED_AVAILABILITY),
                     ttls=settings.cache,
                     capabilities=settings.capabilities,
                     max_attachment_bytes=settings.max_attachment_bytes,

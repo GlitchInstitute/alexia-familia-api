@@ -9,6 +9,8 @@ This file follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and t
 - Run a REST API with `alexia-api serve`, with a typed OpenAPI description at `/openapi.json` and documentation pages at `/docs` and `/redoc`.
 - Read the children of an account, the counters the school tracks for each child, and the staff a guardian can meet.
 - Read the absences and other attendance incidents of a child, with the day, the kind of incident, and whether a reason was given and accepted. The portal's page lists only the days since the start of the month, and the route says so.
+- Read the meetings of a child with the school, with the start, the state, who asked, who is responsible, and the note. The state is one of five words or `unknown`, and the portal's own word comes beside it, because only one word has been seen on a real list.
+- Read the days of a month and the hours of a day on which a member of the staff has a free hour for a meeting. Both routes take a person from the staff list of the same child, and any other id gets `staff_not_found` without a portal call. A day or a month more than 1100 days from today gets `invalid_window`. The settings `cache.meetings` and `cache.availability` say how long the answers are kept, which is five minutes and one minute by default.
 - Read the agenda of a child and of the guardian as JSON, and subscribe to it as a calendar file for one child, for the guardian, or for the whole family.
 - Read the message folders of an account, page through the messages of a folder or only the unread ones, read a message with its text, links, and files, and download an attachment.
 - Hold several children on one login and several logins on one server. A route names a child by id or by a short name that stays stable.

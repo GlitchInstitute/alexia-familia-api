@@ -285,6 +285,55 @@ A row with another count of cells, a date that the reader cannot read, or a firs
 
 The page's justify action calls `WSComunicados.RecuperarRutaComunicadoJustificar` and then moves the whole window to a route that belongs to the session. A plain call cannot follow it, so the server reads the list and leaves the justification to the portal. Read.
 
+### Meetings
+
+The page is `/ACWeb/paginas/Grids/Entrevistas.aspx`, and it takes the same address parameters as the absences page. Its grid is `ctl00_ctl00_ContenidoPagina_ContenidoPagina_CmptEntrevistas_gridReuniones1`, and the client asks for it sorted by `Unbound_Mes asc, Fecha`. The reader sorts the rows again by start and id, so the order does not depend on the portal's sort. Seen.
+
+Each row has 12 cells, as a real list showed once. Seen.
+
+| Cell | Holds | Field of the API |
+| --- | --- | --- |
+| 0 | The id, which has to equal the id of the row | `id` |
+| 1 | An icon whose title is the state | `state` and `state_label` |
+| 2 | An icon for the people who take part | Not read |
+| 3 | The time that remains | Not read |
+| 4 | The month | Not read |
+| 5 | The date as `dd/mm/yyyy` | `starts_at`, with cell 6 |
+| 6 | The start time as `HH:MM` | `starts_at`, with cell 5 |
+| 7 | Who asked for the meeting | `requested_by` |
+| 8 | The person who is responsible | `staff` |
+| 9 | The child and the class | Not read |
+| 10 | The notes | `note` |
+| 11 | A small file icon | Not read |
+
+The date and the time are clock times at the school. The reader gives them the offset that the school has on that day.
+
+Only the state word `Aceptada` was seen. The reader matches the stems below, which are a guess. A label that has the words of two states reads as the first of them in the order of the table, so a cancelled meeting never reads as one that is still on. A label that matches none of them is `unknown`, and the API passes the portal's own word as `state_label` in every case, so a client can read a word that the table does not know. Guessed.
+
+| State | Stems that the reader matches |
+| --- | --- |
+| `cancelled` | `cancelad`, `anulad` |
+| `declined` | `rechazad`, `denegad` |
+| `accepted` | `aceptad`, `confirmad` |
+| `done` | `realizad`, `celebrad` |
+| `requested` | `solicitad`, `pendiente`, `propuest` |
+
+A meeting that the school holds for a whole group has been seen with the start `00:00` and the clock time in the note. The reader passes both as they are, because the note is free text. Seen.
+
+A row with another count of cells, a first cell that differs from the id of the row, or a date or a start time that the reader cannot read is `portal_changed`.
+
+### Free hours of the staff
+
+Two script calls answer, and the table of calls above lists both. They take the id of a member of the staff, which is the `Valor` of the staff list.
+
+`GetFechasDisponibles` lists the free hours of one month as texts written `year,month,day` with no padding. It lists one text for each free hour, so a day with three free hours appears three times, and the reader keeps each day once. `GetHorasByFecha` lists the free hours of one day as texts written `HH:MM-HH:MM`. Its date has to be ISO text, because the `/Date(ms)/` text that the page's own proxy sends is accepted and finds no hours. A person with nothing free gets `{}` from both calls. Seen.
+
+The reader refuses a text that it cannot read, and an hour that ends when it starts or before, as `portal_changed`. The portal gives plain clock times, and the API adds the offset that the school has on that day.
+
+The portal's page offers the staff list of one child before it asks for hours, and the server does the same. It reads the hours only of an id on the staff list of the same child, and it answers `staff_not_found` without a portal call for any other id. Read.
+
+Which days the portal offers is the school's rule. The simulator offers hours only from tomorrow on, and a real portal can differ. Nobody has watched what a real portal answers for a month that is over or for today.
+
 ## The tracking widget and the staff list
 
 `GetWPSeguimiento` answers five HTML fragments. Each holds its count in an `<em>N</em>`. The recording had every counter at zero, so the markup for a count above zero is Read. A fragment with no `<em>` number is `portal_changed`.
@@ -300,6 +349,8 @@ The page's justify action calls `WSComunicados.RecuperarRutaComunicadoJustificar
 - The wording of a maintenance page.
 - A counter above zero in the tracking widget and in the agenda.
 - A row of the absences grid. The cell formats come from the page's script, and the recording had no rows.
+- A meeting in any state but `Aceptada`. The other state words are guesses, and a word that the reader does not know shows as `unknown`.
+- What the portal answers for the free hours of a month that is over or of today. The simulator's rule of hours from tomorrow on is its own.
 - What the school-year rollover looks like, both in the screens it may add to the login and in the agenda.
 - What a real wrong password does to a real account. The design assumes that it can lock it.
 
@@ -307,7 +358,6 @@ The page's justify action calls `WSComunicados.RecuperarRutaComunicadoJustificar
 
 These calls are not in the allowlist, so the server cannot send them. The notes are for whoever builds the next reader.
 
-- Meetings. `WSReuniones.GetFechasDisponibles` with `guidEmpleado`, `mes`, and `anyo` answers `{horarios: ["YYYY,M,D", ...]}` with no padding, or `{}` when nothing is free. It lists one entry for each free hour, so a day with three free hours appears three times. `GetHorasByFecha` with `guidEmpleado` and `fecha` answers `{horas: ["HH:MM-HH:MM", ...]}`. The date has to be ISO text, because the `/Date(ms)/` text that the page's own proxy sends is accepted and finds no hours. The interviews list is a grid with 12 cells a row. Seen.
 - Justifying an absence. The page's justify action moves the whole window to a route that belongs to the session, so a plain call cannot follow it. The page also has a popup that announces an absence, and that is a write. Read.
 - Forms and authorizations. The list is the message grid with `autorizaciones=1` on the page. The recording had no forms, so the shape of one is not known.
 - Writes. Meeting requests, replies, new messages, and absence announcements all have calls in the portal's scripts. None has run on a real portal. Read.

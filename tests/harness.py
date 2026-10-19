@@ -29,6 +29,7 @@ from alexia_api.sim.world import (
     DEMO_USER_B,
     SIM_INSTITUTION_KEY,
     SimChild,
+    SimStaff,
     default_world,
     synthetic_guid,
 )
@@ -57,6 +58,17 @@ def seeded(number: int, username: str = DEMO_USER_A) -> SimMessage:
     family = default_world().family_for(username)
     assert family is not None
     return next(message for message in family.messages if message.guid == synthetic_guid(number))
+
+
+def teacher(number: int) -> SimStaff:
+    """A member of the staff in the simulator's world, found by the number of their id."""
+    return next(
+        member
+        for family in default_world().families
+        for child in family.children
+        for member in child.staff
+        if member.id == synthetic_guid(number)
+    )
 
 
 async def listed_row(

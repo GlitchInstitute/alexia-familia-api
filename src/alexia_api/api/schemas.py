@@ -14,6 +14,7 @@ from alexia_api.domain.accounts import Account
 from alexia_api.domain.agenda import AgendaEvent
 from alexia_api.domain.base import Model
 from alexia_api.domain.children import Child, StaffMember
+from alexia_api.domain.meetings import AvailableSlot, Meeting
 from alexia_api.domain.messages import Folder, MessageSummary
 
 
@@ -59,6 +60,39 @@ class AbsenceList(Model):
     """The attendance incidents the portal lists for one child, newest day first."""
 
     items: tuple[Absence, ...]
+
+
+class MeetingList(Model):
+    """The meetings the portal lists for one child, in the order they take place."""
+
+    items: tuple[Meeting, ...]
+
+
+class AvailableDays(Model):
+    """The days of one month on which a member of the staff has a free hour."""
+
+    month: str = Field(
+        pattern=r"^[0-9]{4}-(0[1-9]|1[0-2])$",
+        description=(
+            "The month the list is for, written YYYY-MM. It is the current month at the school "
+            "when the request named none."
+        ),
+    )
+    items: tuple[date, ...] = Field(
+        description=(
+            "The days with at least one free hour, earliest first, each day once. Empty when "
+            "nothing is free in that month."
+        )
+    )
+
+
+class AvailableHours(Model):
+    """The free slots of one member of the staff on one day."""
+
+    day: date = Field(description="The day the list is for.")
+    items: tuple[AvailableSlot, ...] = Field(
+        description="The free slots, earliest first. Empty when nothing is free on that day."
+    )
 
 
 class FolderList(Model):
