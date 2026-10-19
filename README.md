@@ -160,6 +160,7 @@ For people who write software against the API.
 
 - [The API guide](docs/api-guide.md) explains the conventions that every route shares.
 - [Endpoints](docs/endpoints.md) lists every route, and [errors](docs/errors.md) lists every error code.
+- [Use it as a git submodule](docs/submodule.md) shows how to add the server to your own project, run it from there, and keep your files out of it.
 
 For people who change the code.
 

@@ -31,4 +31,4 @@ This file follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and t
 - Write one access line for each request with the route, the status, the time, the request id, the account, the key name, and the error code. It never holds the query string or a name that the caller typed.
 - Read a secret from a file with `file:/path`, where `~` stands for the home folder.
 - Publish a version by pushing a tag. The release workflow checks everything again, builds the package, pushes the image to the GitHub container registry, and creates the release with the notes from this file.
-- Follow the guides for getting started, configuration, authentication, children and accounts, calendars, deployment, and troubleshooting, with a reference for every route, setting, and error code. The protocol notes say how sure each fact about the portal is.
+- Follow the guides for getting started, configuration, authentication, children and accounts, calendars, deployment, use as a git submodule, and troubleshooting, with a reference for every route, setting, and error code. The protocol notes say how sure each fact about the portal is.

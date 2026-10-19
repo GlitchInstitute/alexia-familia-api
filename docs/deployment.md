@@ -11,6 +11,8 @@ Every way to run it starts the same program, `alexia-api serve`, with the same c
 | A service without Docker | You prefer to run the program directly on a Linux machine. | [A service without Docker](#a-service-without-docker) |
 | Kubernetes | You already run a cluster. | [Kubernetes](#kubernetes) |
 
+If your own project holds this server as a git submodule, [Use it as a git submodule](submodule.md) covers pixi and Compose from inside that project.
+
 ## What every setup needs
 
 - One configuration file, `alexia-api.toml`, with an `[accounts.NAME]` block for each portal login. The [configuration guide](configuration.md) explains each setting.
