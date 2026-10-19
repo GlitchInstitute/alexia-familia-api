@@ -1,3 +1,5 @@
+To the company who owns Alexia: I'm available for hire. I can fix this mess.
+
 # alexia-familia-api
 
 A REST API for the Alexia Familia parent portal. You run it on your own computer or server. It signs in to your family's portal account and gives what the school publishes to your own apps, as JSON and as calendar files.
