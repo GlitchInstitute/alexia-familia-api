@@ -594,6 +594,48 @@ def test_whatever_a_teacher_is_called_the_description_is_that_name_in_plain_word
         assert "DESCRIPTION" not in event
 
 
+@pytest.mark.parametrize(
+    ("text", "written"),
+    [
+        ("\\N", "\\\\N"),
+        ("Teacher \\N.", "Teacher \\\\N."),
+        ("a\\nb", "a\\\\nb"),
+        ("semi;colon, comma", "semi\\;colon\\, comma"),
+        ("ends with a backslash \\", "ends with a backslash \\\\"),
+    ],
+)
+def test_a_name_is_written_with_the_escapes_of_the_standard_and_reads_back_as_it_was(
+    text: str, written: str
+) -> None:
+    data = render(lesson(title=text, teacher=text), name=text)
+
+    lines = unfolded(data)
+    assert f"X-WR-CALNAME:{written}" in lines
+    assert f"SUMMARY:{written}" in lines
+    assert f"DESCRIPTION:Teacher {written}." in lines
+    event = only_event(data)
+    assert str(event["SUMMARY"]) == text
+    assert str(event["DESCRIPTION"]) == f"Teacher {text}."
+
+
+def test_a_description_of_two_sentences_keeps_its_line_break_as_an_escape() -> None:
+    signals = LessonSignals(tasks=1, activities=0, notes=0, tests=0, substitution=False)
+
+    data = render(lesson(signals=signals))
+
+    assert "DESCRIPTION:Teacher Ana Muestra.\\nThe school flagged 1 task." in unfolded(data)
+    assert str(only_event(data)["DESCRIPTION"]) == (
+        "Teacher Ana Muestra.\nThe school flagged 1 task."
+    )
+
+
+def test_an_id_with_a_backslash_is_written_with_the_escapes_of_the_standard() -> None:
+    data = render(lesson(event_id="a\\Nb"))
+
+    assert "UID:kid.a\\\\Nb|2026-01-12@alexia-familia-api" in unfolded(data)
+    assert str(only_event(data)["UID"]) == "kid.a\\Nb|2026-01-12@alexia-familia-api"
+
+
 ALLOWED_NAMES = frozenset(
     {
         "BEGIN",

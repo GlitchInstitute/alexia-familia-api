@@ -35,6 +35,28 @@ _INVISIBLE: Final = frozenset({"Cf", "Cs"})
 type _Occasion = tuple[EventKind, str, datetime, datetime]
 
 
+class _Text(vText):
+    r"""A text value that the file holds exactly as given.
+
+    The library reads a backslash followed by an N as a line break before it escapes anything, so
+    a name that holds those two characters would come out as two lines. This class writes the
+    escapes that the standard lists and nothing more.
+    """
+
+    __slots__ = ()
+
+    def to_ical(self) -> bytes:
+        escaped = (
+            str(self)
+            .replace("\\", "\\\\")
+            .replace(";", "\\;")
+            .replace(",", "\\,")
+            .replace("\r\n", "\\n")
+            .replace("\n", "\\n")
+        )
+        return escaped.encode("utf-8")
+
+
 @dataclass(frozen=True, slots=True)
 class CalendarSource:
     """The entries of one person, and what tells them from the entries of another person."""
@@ -145,9 +167,9 @@ def _summary(entry: CalendarEntry) -> str:
 def _vevent(entry: CalendarEntry, zone: ZoneInfo, stamped_at: datetime) -> Event:
     event = entry.event
     item = Event()
-    item.add("uid", _uid(entry))
+    item.add("uid", _Text(_uid(entry)))
     item.add("dtstamp", stamped_at.astimezone(UTC))
-    item.add("summary", _summary(entry))
+    item.add("summary", _Text(_summary(entry)))
     if event.all_day:
         first = event.starts_at.astimezone(zone).date()
         last = max(first, event.ends_at.astimezone(zone).date())
@@ -160,7 +182,7 @@ def _vevent(entry: CalendarEntry, zone: ZoneInfo, stamped_at: datetime) -> Event
             item.add("dtend", event.ends_at.astimezone(UTC))
     description = describe(event)
     if description:
-        item.add("description", description)
+        item.add("description", _Text(description))
     return item
 
 
@@ -173,7 +195,7 @@ def render_calendar(
     calendar.add("version", "2.0")
     calendar.add("calscale", "GREGORIAN")
     calendar.add("method", "PUBLISH")
-    calendar.add("x-wr-calname", vText(plain(name) or UNNAMED))
+    calendar.add("x-wr-calname", _Text(plain(name) or UNNAMED))
     calendar.add("x-wr-timezone", zone.key)
     calendar.add("refresh-interval", REFRESH_EVERY, parameters={"VALUE": "DURATION"})
     calendar.add("x-published-ttl", "PT1H")
