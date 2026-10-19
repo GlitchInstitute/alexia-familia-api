@@ -269,6 +269,11 @@ async def _not_found(request: Request, error: NotFoundError) -> Response:
                 "list of children, and ask for that list with fresh=true if a sibling was added "
                 "lately"
             )
+        case "guardian":
+            detail = (
+                "the portal did not list a guardian for this login, so there is no guardian "
+                "agenda to read, and the children's agendas are still available"
+            )
         case "message":
             detail = (
                 f"no message '{reference}' in this folder, use an id from the list of messages of "

@@ -73,6 +73,24 @@ def test_reads_the_other_family_too() -> None:
     assert [child.slug for child in snapshot.children] == ["hugo", "alba"]
 
 
+def test_a_home_page_that_lists_no_guardian_still_lists_the_children() -> None:
+    html = render_home(default_world().families[0], guardian_listed=False)
+
+    snapshot = parse_home(html)
+
+    assert snapshot.guardian is None
+    assert [child.slug for child in snapshot.children] == ["lucia", "mateo"]
+
+
+async def test_the_simulator_can_serve_a_home_page_without_a_guardian(harness: Harness) -> None:
+    harness.sim.options.home_without_guardian = True
+
+    snapshot = await harness.gateway().call(read_home)
+
+    assert snapshot.guardian is None
+    assert [child.slug for child in snapshot.children] == ["lucia", "mateo"]
+
+
 def test_a_child_missing_from_the_switcher_falls_back_to_the_full_name() -> None:
     html = page(
         [tracked(0x101, 0x201, "Lucía Ejemplo Muestra")],

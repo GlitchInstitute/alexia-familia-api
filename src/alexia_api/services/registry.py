@@ -13,6 +13,7 @@ import httpx
 from alexia_api.clock import Clock, LocalClock, SystemClock
 from alexia_api.config import AccountSettings, CacheTtls, Settings, resolve_secrets
 from alexia_api.domain.accounts import Account, Capabilities
+from alexia_api.domain.agenda import AgendaEvent
 from alexia_api.domain.children import Child, Guardian, StaffMember, TrackingCounters, apply_pins
 from alexia_api.domain.ids import (
     AccountId,
@@ -27,6 +28,8 @@ from alexia_api.domain.ids import (
 from alexia_api.domain.media import Download
 from alexia_api.domain.messages import Folder, FolderName, Message, MessageSummary
 from alexia_api.domain.security import Principal
+from alexia_api.domain.time import DateWindow
+from alexia_api.portal.agenda import read_agenda
 from alexia_api.portal.attachments import download_attachment
 from alexia_api.portal.breaker import BREAKER_DIRECTORY, BreakerStore
 from alexia_api.portal.children import read_home
@@ -46,6 +49,11 @@ type TransportFactory = Callable[[AccountSettings], httpx.AsyncBaseTransport | N
 MAX_CACHED_MESSAGES: Final = 32
 """How many messages with their words an account keeps. A message with pictures can take several
 mebibytes, so these are kept apart from the lists, which a long run of reads must not push out."""
+
+MAX_CACHED_AGENDAS: Final = 16
+"""How many ranges of an agenda an account keeps. A client can ask for any range, and a year of
+lessons holds about a thousand entries, so the ranges have a store of their own that a run of odd
+requests can fill without pushing out the list of children."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,6 +75,7 @@ class AccountRuntime:
         gateway: Gateway,
         cache: TtlCache,
         message_cache: TtlCache,
+        agenda_cache: TtlCache,
         ttls: CacheTtls,
         capabilities: Capabilities,
         max_attachment_bytes: int,
@@ -78,6 +87,7 @@ class AccountRuntime:
         self._gateway = gateway
         self._cache = cache
         self._message_cache = message_cache
+        self._agenda_cache = agenda_cache
         self._ttls = ttls
         self._capabilities = capabilities
         self._max_attachment_bytes = max_attachment_bytes
@@ -128,6 +138,45 @@ class AccountRuntime:
             return tuple(await self._gateway.call(lambda tx: read_roster(tx, child.id)))
 
         return await self._cache.get(("staff", child.id), self._ttls.staff, load, fresh=fresh)
+
+    async def agenda(
+        self, child: Child, window: DateWindow, *, fresh: bool = False
+    ) -> Cached[tuple[AgendaEvent, ...]]:
+        """The lessons and school events of one child over a range of days.
+
+        Each range is stored on its own. The portal answers a range with far more than was asked
+        for, so a client that moves its range from day to day costs the portal a read each day.
+        """
+        return await self._agenda_cache.get(
+            ("agenda", "child", child.person_id, *_days_of(window)),
+            self._ttls.agenda,
+            lambda: self._gateway.call(
+                lambda tx: read_agenda(tx, "child", child.person_id, window)
+            ),
+            fresh=fresh,
+        )
+
+    async def guardian_agenda(
+        self, window: DateWindow, *, fresh: bool = False
+    ) -> Cached[tuple[AgendaEvent, ...]]:
+        """The interviews and school events of the guardian over a range of days.
+
+        The guardian is found only when the portal has to be asked, so a stored range needs no
+        list of children. A login that lists no guardian has no such agenda. A fresh read also
+        reads the list of children again, so a guardian that the portal has begun to list is found.
+        """
+
+        async def load() -> tuple[AgendaEvent, ...]:
+            guardian = (await self.directory(fresh=fresh)).value.guardian
+            if guardian is None:
+                raise NotFoundError("guardian", self.account)
+            return await self._gateway.call(
+                lambda tx: read_agenda(tx, "guardian", guardian.person_id, window)
+            )
+
+        return await self._agenda_cache.get(
+            ("agenda", "guardian", *_days_of(window)), self._ttls.agenda, load, fresh=fresh
+        )
 
     async def folders(self, *, fresh: bool = False) -> Cached[tuple[Folder, ...]]:
         return await self._cache.get(
@@ -222,6 +271,10 @@ class AccountRuntime:
         return Directory(guardian=home.guardian, children=apply_pins(home.children, self._pins))
 
 
+def _days_of(window: DateWindow) -> tuple[str, str]:
+    return window.first.isoformat(), window.last.isoformat()
+
+
 class Registry:
     def __init__(self, runtimes: Iterable[AccountRuntime]) -> None:
         self._runtimes = {runtime.account: runtime for runtime in runtimes}
@@ -278,6 +331,7 @@ class Registry:
                     gateway=gateway,
                     cache=TtlCache(clock),
                     message_cache=TtlCache(clock, max_entries=MAX_CACHED_MESSAGES),
+                    agenda_cache=TtlCache(clock, max_entries=MAX_CACHED_AGENDAS),
                     ttls=settings.cache,
                     capabilities=settings.capabilities,
                     max_attachment_bytes=settings.max_attachment_bytes,

@@ -219,6 +219,11 @@ class CacheTtls(Model):
         ge=0,
         description="Seconds to reuse one message with its words, after it was read.",
     )
+    agenda: float = Field(
+        default=600,
+        ge=0,
+        description="Seconds to reuse the agenda of a child or of the guardian for one range.",
+    )
 
 
 def _split_list(value: object) -> object:

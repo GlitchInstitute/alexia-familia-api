@@ -125,6 +125,8 @@ class SimOptions:
     """The first entry of the feed has a start that is not a date."""
     agenda_feed_fails: bool = False
     """The feed answers with the portal's server error, as it does when it cannot build a week."""
+    home_without_guardian: bool = False
+    """The home page lists the children and does not list the guardian."""
 
 
 @dataclass(slots=True)
@@ -176,7 +178,7 @@ def _photo(key: str, size: int) -> str:
     )
 
 
-def render_home(family: SimFamily) -> str:
+def render_home(family: SimFamily, *, guardian_listed: bool = True) -> str:
     tracked = "".join(
         f'<li class="{"hijo_activo" if index == 0 else ""}" '
         f'onclick="javascript:CambiarHijoSeguimiento(event);" hijo="{child.student_id}">'
@@ -185,13 +187,16 @@ def render_home(family: SimFamily) -> str:
         for index, child in enumerate(family.children)
     )
     guardian = family.guardian
-    picker = (
+    listed_guardian = (
         f'<li class="padre activo" '
         f"onclick=\"javascript:HijoClicked(this,'{guardian.person_id}', 'True');\">"
         f'<div class="contienefoto"><img src="{_photo(guardian.person_id, 49)}"></div>'
         f'<ul class="datos_user"><li><strong>Padre</strong></li>'
         f"<li><h3>{escape(guardian.first_name)}</h3></li></ul></li>"
-    ) + "".join(
+        if guardian_listed
+        else ""
+    )
+    picker = listed_guardian + "".join(
         f'<li class="hijo inactivo" '
         f"onclick=\"javascript:HijoClicked(this,'{child.person_id}', 'False');\">"
         f'<div class="contienefoto"><img src="{_photo(child.person_id, 49)}"></div>'
@@ -786,7 +791,9 @@ class PortalSim:
             return RedirectResponse(
                 f"{LOGON_PATH}?ReturnUrl={quote(HOME_PATH, safe='')}", status_code=302
             )
-        return HTMLResponse(render_home(family))
+        return HTMLResponse(
+            render_home(family, guardian_listed=not self.options.home_without_guardian)
+        )
 
     async def _keep_alive(self, request: Request) -> Response:
         self._live_session(request)

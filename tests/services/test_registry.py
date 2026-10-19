@@ -1,7 +1,7 @@
 """The registry gives each account its own gateway and cache, and finds children through them."""
 
 import asyncio
-from datetime import timedelta
+from datetime import date, timedelta
 
 import pytest
 
@@ -13,6 +13,7 @@ from alexia_api.domain.errors import BreakerOpen, InvalidCredentials
 from alexia_api.domain.ids import parse_account_id
 from alexia_api.domain.messages import FolderName, Message, MessageSummary
 from alexia_api.domain.security import Principal
+from alexia_api.domain.time import DateWindow
 from alexia_api.portal.breaker import BreakerStore
 from alexia_api.portal.inbox import Feed
 from alexia_api.services.errors import NotFoundError
@@ -26,6 +27,10 @@ HUGO = synthetic_guid(0x111)
 UNREAD = synthetic_guid(0x1001)
 WITH_FILE = synthetic_guid(0x1002)
 MESSAGE_DATA = "GetDatosPaginaComunicado"
+AGENDA_FEED = "ControladorAgenda.ashx"
+HOME = "HomeMetro.aspx"
+WEEK = DateWindow(first=date(2025, 10, 13), last=date(2025, 10, 19))
+NEXT_WEEK = DateWindow(first=date(2025, 10, 20), last=date(2025, 10, 26))
 
 
 async def test_accounts_are_kept_in_the_order_they_were_configured(harness: Harness) -> None:
@@ -237,6 +242,189 @@ async def test_staff_is_cached_for_longer_than_tracking(
 
     assert (await runtime.tracking(lucia)).status == "miss"
     assert (await runtime.staff(lucia)).status == "hit"
+
+
+async def test_the_agenda_of_a_child_holds_only_the_days_asked_for(harness: Harness) -> None:
+    runtime = harness.registry().get("marta")
+    lucia = (await runtime.child("lucia")).value
+
+    week = (await runtime.agenda(lucia, WEEK)).value
+
+    assert [event.kind for event in week].count("lesson") == 30
+    assert {event.starts_at.date() for event in week} <= set(WEEK.days())
+
+
+async def test_each_child_has_an_agenda_of_its_own(harness: Harness) -> None:
+    runtime = harness.registry().get("marta")
+    lucia = (await runtime.child("lucia")).value
+    mateo = (await runtime.child("mateo")).value
+
+    lucias = (await runtime.agenda(lucia, WEEK)).value
+    mateos = (await runtime.agenda(mateo, WEEK)).value
+
+    assert {event.id for event in lucias}.isdisjoint({event.id for event in mateos})
+
+
+async def test_a_range_is_read_once_and_kept_for_ten_minutes(
+    harness: Harness, clock: ManualClock
+) -> None:
+    runtime = harness.registry().get("marta")
+    lucia = (await runtime.child("lucia")).value
+    first = await runtime.agenda(lucia, WEEK)
+    reads = harness.requests_to(AGENDA_FEED)
+
+    clock.advance(599)
+    second = await runtime.agenda(lucia, WEEK)
+    clock.advance(2)
+    third = await runtime.agenda(lucia, WEEK)
+
+    assert [answer.status for answer in (first, second, third)] == ["miss", "hit", "miss"]
+    assert second.value == first.value
+    assert harness.requests_to(AGENDA_FEED) == reads + 1
+
+
+async def test_every_range_and_every_person_is_kept_under_a_key_of_its_own(
+    harness: Harness,
+) -> None:
+    runtime = harness.registry().get("marta")
+    lucia = (await runtime.child("lucia")).value
+    mateo = (await runtime.child("mateo")).value
+
+    async def everything() -> list[tuple[str, tuple[object, ...]]]:
+        answers = [
+            await runtime.agenda(lucia, WEEK),
+            await runtime.agenda(lucia, NEXT_WEEK),
+            await runtime.agenda(mateo, WEEK),
+            await runtime.guardian_agenda(NEXT_WEEK),
+        ]
+        return [(answer.status, answer.value) for answer in answers]
+
+    first = await everything()
+    again = await everything()
+
+    assert [status for status, _ in first] == ["miss"] * 4
+    assert [status for status, _ in again] == ["hit"] * 4
+    assert [value for _, value in again] == [value for _, value in first]
+    assert len({value for _, value in first}) == 4
+
+
+async def test_two_ranges_that_start_on_the_same_day_are_kept_apart(harness: Harness) -> None:
+    runtime = harness.registry().get("marta")
+    lucia = (await runtime.child("lucia")).value
+    one_day = DateWindow(first=WEEK.first, last=WEEK.first)
+
+    week = await runtime.agenda(lucia, WEEK)
+    day = await runtime.agenda(lucia, one_day)
+
+    assert (week.status, day.status) == ("miss", "miss")
+    assert {event.starts_at.date() for event in day.value} == {WEEK.first}
+    assert len(week.value) > len(day.value)
+
+
+async def test_a_fresh_look_at_an_agenda_reads_the_portal_again(harness: Harness) -> None:
+    runtime = harness.registry().get("marta")
+    lucia = (await runtime.child("lucia")).value
+    await runtime.agenda(lucia, WEEK)
+    reads = harness.requests_to(AGENDA_FEED)
+
+    again = await runtime.agenda(lucia, WEEK, fresh=True)
+
+    assert again.status == "bypass"
+    assert harness.requests_to(AGENDA_FEED) == reads + 1
+
+
+async def test_a_time_to_live_of_zero_turns_the_store_of_agendas_off(harness: Harness) -> None:
+    runtime = harness.registry(harness.settings(cache=CacheTtls(agenda=0))).get("marta")
+    lucia = (await runtime.child("lucia")).value
+
+    first = await runtime.agenda(lucia, WEEK)
+    second = await runtime.agenda(lucia, WEEK)
+
+    assert (first.status, second.status) == ("miss", "miss")
+
+
+async def test_an_account_keeps_only_the_latest_ranges_of_its_agendas(
+    harness: Harness, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("alexia_api.services.registry.MAX_CACHED_AGENDAS", 2)
+    runtime = harness.registry().get("marta")
+    lucia = (await runtime.child("lucia")).value
+    days = [DateWindow(first=date(2025, 10, day), last=date(2025, 10, day)) for day in (13, 14, 15)]
+    for window in days:
+        await runtime.agenda(lucia, window)
+
+    statuses = [(await runtime.agenda(lucia, window)).status for window in reversed(days)]
+
+    assert statuses == ["hit", "hit", "miss"]
+
+
+async def test_a_run_of_odd_ranges_does_not_push_out_the_list_of_children(
+    harness: Harness, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("alexia_api.services.registry.MAX_CACHED_AGENDAS", 1)
+    runtime = harness.registry().get("marta")
+    lucia = (await runtime.child("lucia")).value
+    for day in (13, 14, 15):
+        await runtime.agenda(lucia, DateWindow(first=date(2025, 10, day), last=date(2025, 10, day)))
+
+    assert (await runtime.directory()).status == "hit"
+
+
+async def test_the_agenda_of_the_guardian_holds_interviews_and_no_lessons(
+    harness: Harness,
+) -> None:
+    runtime = harness.registry().get("marta")
+
+    events = (await runtime.guardian_agenda(NEXT_WEEK)).value
+
+    assert [event.title for event in events if event.kind == "interview"] == [
+        "Entrevista: Aceptada"
+    ]
+    assert "lesson" not in {event.kind for event in events}
+
+
+async def test_the_guardian_is_looked_up_only_when_the_portal_has_to_be_asked(
+    harness: Harness, clock: ManualClock
+) -> None:
+    runtime = harness.registry(harness.settings(cache=CacheTtls(agenda=100_000))).get("marta")
+    first = await runtime.guardian_agenda(WEEK)
+    homes = harness.requests_to(HOME)
+
+    clock.advance(1000)
+    second = await runtime.guardian_agenda(WEEK)
+
+    assert (first.status, second.status) == ("miss", "hit")
+    assert harness.requests_to(HOME) == homes
+
+
+async def test_a_login_that_lists_no_guardian_has_no_guardian_agenda(harness: Harness) -> None:
+    harness.sim.options.home_without_guardian = True
+    runtime = harness.registry().get("marta")
+
+    with pytest.raises(NotFoundError) as raised:
+        await runtime.guardian_agenda(WEEK)
+
+    assert (raised.value.kind, raised.value.reference) == ("guardian", "marta")
+    assert harness.requests_to(AGENDA_FEED) == 0
+    lucia = (await runtime.child("lucia")).value
+    assert (await runtime.agenda(lucia, WEEK)).value
+
+
+async def test_a_fresh_look_finds_a_guardian_that_the_portal_began_to_list(
+    harness: Harness,
+) -> None:
+    harness.sim.options.home_without_guardian = True
+    runtime = harness.registry().get("marta")
+    with pytest.raises(NotFoundError):
+        await runtime.guardian_agenda(NEXT_WEEK)
+    harness.sim.options.home_without_guardian = False
+
+    with pytest.raises(NotFoundError):
+        await runtime.guardian_agenda(NEXT_WEEK)
+    found = await runtime.guardian_agenda(NEXT_WEEK, fresh=True)
+
+    assert found.status == "bypass"
+    assert [event.kind for event in found.value if event.kind == "interview"] == ["interview"]
 
 
 @pytest.mark.parametrize(("name", "received", "sent"), [("marta", 8, 2), ("pablo", 3, 1)])
