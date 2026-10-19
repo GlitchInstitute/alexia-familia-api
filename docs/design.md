@@ -258,3 +258,5 @@ These need an owner decision and have a default.
 - Package and image publishing. The default is none until a first release.
 - A Spanish translation of the quickstart. The default is English only.
 - Keys for one child. A key limits the accounts it opens and not the children, so a key for a calendar app opens every child of the account. The default is to keep it that way until someone needs a key for one child.
+- When to build the writes. The default is to wait until the owner has run each flow by hand on their own account, with the browser's network tab open, and the protocol notes can label every step as seen. A write that copies a guess can send a wrong message to a teacher or lock the account, and the simulator can only show that the server agrees with itself.
+- The three write switches. `allow_writes`, `allow_forms`, and `restore_unread` change nothing yet, because no call writes. The default is to keep them, so that the gate is tested before the first write exists, and the `doctor` command warns whenever one is on. The other choice is to remove them until the writes arrive.
