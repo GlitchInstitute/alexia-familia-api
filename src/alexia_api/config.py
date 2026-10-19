@@ -84,7 +84,11 @@ class AccountSettings(Model):
         default=None,
         min_length=1,
         max_length=80,
-        description="A name for people, shown in responses. Defaults to the account name.",
+        description=(
+            "A name for people, such as the guardian's first name. It shows in responses and in "
+            "the names of the calendars that belong to the whole account. Defaults to the "
+            "account name."
+        ),
     )
     login_url: str | None = Field(
         default=None,

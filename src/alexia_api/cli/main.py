@@ -193,7 +193,13 @@ def demo(host: HostOption = "127.0.0.1", port: PortOption = 8000) -> None:
     with demo_state() as state_dir:
         demonstration = build_demo(state_dir)
         base = address(host, port)
-        typer.echo(banner(base, demonstration.key, windows=sys.platform == "win32"), err=True)
+        shown = banner(
+            base,
+            demonstration.key,
+            demonstration.calendar_key,
+            windows=sys.platform == "win32",
+        )
+        typer.echo(shown, err=True)
         typer.echo(err=True)
         uvicorn.run(
             demonstration.app,

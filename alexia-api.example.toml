@@ -95,9 +95,10 @@
 # parent with two children needs a single block. Add another block for another parent's
 # login.
 [accounts.family]
-# A name for people, shown in responses. Defaults to the account name. It must be at least
-# 1 character and at most 80 characters.
-# label = "Our family"
+# A name for people, such as the guardian's first name. It shows in responses and in the
+# names of the calendars that belong to the whole account. Defaults to the account name.
+# It must be at least 1 character and at most 80 characters.
+# label = "Marta"
 
 # The address of the portal's login page, pasted as is. The server takes the portal
 # address and the school key from it. Use this or portal_url with institution_key.

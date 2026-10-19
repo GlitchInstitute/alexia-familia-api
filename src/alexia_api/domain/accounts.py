@@ -62,7 +62,12 @@ class Account(Model):
     """One set of portal credentials. It holds the children that the portal lists for it."""
 
     id: AccountId = Field(description="The account's short name in URLs, chosen by the operator.")
-    label: str = Field(description="A name for people, for example the guardian's first name.")
+    label: str = Field(
+        description=(
+            "A name for people, for example the guardian's first name. It also names the family "
+            "calendar and the guardian calendar."
+        )
+    )
     portal_host: str = Field(description="The host name of the portal this account signs in to.")
     connection: Connection
     capabilities: Capabilities

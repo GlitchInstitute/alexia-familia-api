@@ -13,7 +13,7 @@ import uvicorn
 from fastapi import FastAPI
 
 from alexia_api.cli import main
-from alexia_api.demo import ENDING_SIGNALS, TOUR, banner
+from alexia_api.demo import CALENDAR_PATH, ENDING_SIGNALS, TOUR, banner
 from alexia_api.logs import log_config
 from tests.cli.conftest import UvicornCall
 from tests.cli.support import run
@@ -24,34 +24,35 @@ class Asked:
     """What the stand-in for uvicorn saw while the demo was running."""
 
     status: int | None = None
+    calendar_status: int | None = None
     state_dir: Path | None = None
     existed: bool | None = None
 
 
 @pytest.fixture
 def asked(monkeypatch: pytest.MonkeyPatch) -> Asked:
-    """Replace uvicorn with a stand-in that asks the server a question with the key shown."""
-    shown: list[str] = []
+    """Replace uvicorn with a stand-in that asks the server a question with each key shown."""
+    shown: list[tuple[str, str]] = []
 
-    def spy(base: str, key: str, *, windows: bool = False) -> str:
-        shown.append(key)
-        return banner(base, key, windows=windows)
+    def spy(base: str, key: str, calendar_key: str, *, windows: bool = False) -> str:
+        shown.append((key, calendar_key))
+        return banner(base, key, calendar_key, windows=windows)
 
-    async def ask(app: FastAPI) -> int:
+    async def ask(app: FastAPI) -> tuple[int, int]:
+        key, calendar_key = shown[0]
         transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
         async with httpx.AsyncClient(transport=transport, base_url="http://demo.test") as client:
-            response = await client.get(
-                "/v1/accounts", headers={"Authorization": f"Bearer {shown[0]}"}
-            )
+            accounts = await client.get("/v1/accounts", headers={"Authorization": f"Bearer {key}"})
+            calendar = await client.get(CALENDAR_PATH, params={"key": calendar_key})
         await app.state.services.registry.aclose()
-        return response.status_code
+        return accounts.status_code, calendar.status_code
 
     seen = Asked()
 
     def serve(app: FastAPI, **_options: Any) -> None:
         seen.state_dir = app.state.services.settings.state_dir
         seen.existed = seen.state_dir.exists()
-        seen.status = asyncio.run(ask(app))
+        seen.status, seen.calendar_status = asyncio.run(ask(app))
 
     monkeypatch.setattr(main, "banner", spy)
     monkeypatch.setattr(uvicorn, "run", serve)
@@ -83,6 +84,14 @@ def test_the_key_the_banner_shows_opens_the_server_while_it_runs(asked: Asked) -
     run("demo")
 
     assert asked.status == 200
+
+
+def test_the_address_the_banner_gives_a_calendar_app_opens_a_calendar_while_it_runs(
+    asked: Asked,
+) -> None:
+    run("demo")
+
+    assert asked.calendar_status == 200
 
 
 def test_the_state_folder_exists_while_the_demo_runs_and_is_gone_afterwards(asked: Asked) -> None:

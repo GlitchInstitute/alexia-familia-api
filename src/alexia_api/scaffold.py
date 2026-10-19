@@ -198,7 +198,7 @@ def _account_setting(setting: SettingDoc, name: str, login_url: str) -> list[str
         "password": f"env:{secret_variable(name, 'password')}",
     }
     optional = {
-        "label": "Our family",
+        "label": "Marta",
         "portal_url": "https://portal.example.test",
         "institution_key": "your-school-key",
         "role_id": "5afe0000-0000-4000-8000-000000000501",

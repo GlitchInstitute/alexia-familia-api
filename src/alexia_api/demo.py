@@ -2,8 +2,8 @@
 
 The families, the children, and everything they show are made up. The simulator runs in this
 process, so the demo needs no second server and no network. The settings are fixed values, so a
-person's own `ALEXIA_API_` variables can never put a real account into the demo. The key is made
-when the demo starts, in a folder that the caller throws away when the demo stops.
+person's own `ALEXIA_API_` variables can never put a real account into the demo. The keys are
+made when the demo starts, in a folder that the caller throws away when the demo stops.
 """
 
 import signal
@@ -37,6 +37,7 @@ from alexia_api.sim.world import (
 )
 
 DEMO_KEY_NAME: Final = "demo"
+DEMO_CALENDAR_KEY_NAME: Final = "demo-calendar"
 
 ENDING_SIGNALS: Final = tuple(
     signal.Signals[name] for name in ("SIGTERM", "SIGHUP") if name in signal.Signals.__members__
@@ -63,6 +64,9 @@ class Suggestion:
 
 _MUSEUM_MESSAGE: Final = f"/v1/accounts/marta/messages/{synthetic_guid(0x1002)}"
 
+CALENDAR_PATH: Final = "/v1/accounts/marta/agenda.ics"
+"""The calendar that the banner offers to a calendar app."""
+
 TOUR: Final = (
     Suggestion("/v1/accounts", "the accounts this key may use"),
     Suggestion("/v1/accounts/marta/children", "the children of one account"),
@@ -86,8 +90,8 @@ TOUR: Final = (
         save_as="museo.pdf",
     ),
     Suggestion(
-        "/v1/accounts/marta/agenda.ics",
-        "one calendar file for the whole family, to open in a calendar app",
+        CALENDAR_PATH,
+        "the calendar of the whole family, as a file to look at",
         save_as="familia.ics",
     ),
 )
@@ -98,6 +102,7 @@ TOUR: Final = (
 class Demo:
     app: FastAPI
     key: str
+    calendar_key: str
     settings: Settings
 
 
@@ -124,7 +129,7 @@ def demo_state() -> Iterator[Path]:
 
 
 def build_demo(state_dir: Path, clock: Clock | None = None) -> Demo:
-    """The server, and a key that may use every account and every scope."""
+    """The server, a key for everything, and a key that opens calendars and nothing else."""
     sim = PortalSim()
     settings = FixedSettings(
         state_dir=state_dir,
@@ -134,14 +139,14 @@ def build_demo(state_dir: Path, clock: Clock | None = None) -> Demo:
                 institution_key=SIM_INSTITUTION_KEY,
                 username=SecretStr(DEMO_USER_A),
                 password=SecretStr(DEMO_PASSWORD_A),
-                label="The family of Marta, made up",
+                label="Marta (made up)",
             ),
             "pablo": AccountSettings(
                 portal_url=sim.base_url,
                 institution_key=SIM_INSTITUTION_KEY,
                 username=SecretStr(DEMO_USER_B),
                 password=SecretStr(DEMO_PASSWORD_B),
-                label="The family of Pablo, made up",
+                label="Pablo (made up)",
             ),
         },
     )
@@ -150,8 +155,9 @@ def build_demo(state_dir: Path, clock: Clock | None = None) -> Demo:
     )
     keys = ApiKeyStore(state_dir / FILE_NAME, clock)
     issued = keys.create(DEMO_KEY_NAME, scopes=["admin"], accounts=[ALL_ACCOUNTS])
+    calendar = keys.create(DEMO_CALENDAR_KEY_NAME, scopes=["feed"], accounts=[ALL_ACCOUNTS])
     app = create_app(settings, registry=registry, keys=keys, clock=clock)
-    return Demo(app=app, key=issued.key, settings=settings)
+    return Demo(app=app, key=issued.key, calendar_key=calendar.key, settings=settings)
 
 
 def address(host: str, port: int) -> str:
@@ -162,10 +168,10 @@ def address(host: str, port: int) -> str:
     return f"http://{shown}:{port}"
 
 
-def banner(base: str, key: str, *, windows: bool = False) -> str:
-    """What a person needs to start trying the demo, with the key and the address filled in.
+def banner(base: str, key: str, calendar_key: str, *, windows: bool = False) -> str:
+    """What a person needs to start trying the demo, with the keys and the address filled in.
 
-    Each address is quoted, because zsh reads an unquoted `?` as a wildcard.
+    Each address in a command is quoted, because zsh reads an unquoted `?` as a wildcard.
     """
     curl = "curl.exe" if windows else "curl"
     requests = "\n\n".join(
@@ -189,6 +195,12 @@ def banner(base: str, key: str, *, windows: bool = False) -> str:
         "To try it from a terminal, copy a line.\n"
         "\n"
         f"{requests}\n"
+        "\n"
+        "To subscribe a calendar app on this computer, give it this address. The key in it opens\n"
+        "calendars and nothing else. Remove the calendar from the app when you stop the demo,\n"
+        "because the school is made up.\n"
+        "\n"
+        f"    {base}{CALENDAR_PATH}?key={calendar_key}\n"
         "\n"
         "Press Ctrl+C to stop."
     )

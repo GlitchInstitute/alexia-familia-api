@@ -10,6 +10,7 @@ import httpx
 import pytest
 
 from alexia_api.demo import (
+    CALENDAR_PATH,
     ENDING_SIGNALS,
     TOUR,
     Demo,
@@ -23,6 +24,7 @@ from alexia_api.services.keys import FILE_NAME
 
 SERVER = "http://demo.test"
 KEY = "afk_" + "k" * 43
+CALENDAR_KEY = "afk_" + "c" * 43
 
 
 @asynccontextmanager
@@ -90,6 +92,45 @@ def test_the_demo_suggests_exactly_these_files() -> None:
     assert [item.save_as for item in TOUR if item.save_as] == ["museo.pdf", "familia.ics"]
 
 
+async def test_the_address_for_a_calendar_app_opens_the_calendar_of_the_family(
+    served: tuple[Demo, httpx.AsyncClient],
+) -> None:
+    demo, client = served
+    shown = banner(SERVER, demo.key, demo.calendar_key)
+    [line] = [line.strip() for line in shown.splitlines() if "?key=" in line]
+
+    response = await client.get(line.removeprefix(SERVER))
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "text/calendar; charset=utf-8"
+    assert b"X-WR-CALNAME:Marta (made up) family school calendar" in response.content
+
+
+async def test_the_calendar_key_of_the_demo_opens_calendars_and_nothing_else(
+    served: tuple[Demo, httpx.AsyncClient],
+) -> None:
+    demo, client = served
+    header = {"Authorization": f"Bearer {demo.calendar_key}"}
+
+    calendar = await client.get(CALENDAR_PATH, headers=header)
+    accounts = await client.get("/v1/accounts", headers=header)
+    in_an_address = await client.get(f"/v1/accounts?key={demo.calendar_key}")
+
+    assert calendar.status_code == 200
+    assert (accounts.status_code, accounts.json()["code"]) == (403, "insufficient_scope")
+    assert (in_an_address.status_code, in_an_address.json()["code"]) == (401, "missing_api_key")
+
+
+async def test_the_demo_key_does_not_travel_in_an_address(
+    served: tuple[Demo, httpx.AsyncClient],
+) -> None:
+    demo, client = served
+
+    response = await client.get(f"{CALENDAR_PATH}?key={demo.key}")
+
+    assert (response.status_code, response.json()["code"]) == (403, "key_not_allowed_in_url")
+
+
 async def test_the_demo_holds_two_families_of_two_children(
     served: tuple[Demo, httpx.AsyncClient],
 ) -> None:
@@ -112,8 +153,8 @@ async def test_each_account_says_in_its_label_that_the_family_is_made_up(
     accounts = (await client.get("/v1/accounts", headers=bearer(demo))).json()["items"]
 
     assert [account["label"] for account in accounts] == [
-        "The family of Marta, made up",
-        "The family of Pablo, made up",
+        "Marta (made up)",
+        "Pablo (made up)",
     ]
 
 
@@ -213,7 +254,7 @@ def test_the_handlers_for_those_signals_are_put_back() -> None:
 
 
 def test_the_banner_shows_the_key_the_documentation_and_a_request_for_each_suggestion() -> None:
-    text = banner("http://127.0.0.1:8000", KEY)
+    text = banner("http://127.0.0.1:8000", KEY, CALENDAR_KEY)
 
     lines = [line.strip() for line in text.splitlines()]
     assert KEY in lines
@@ -225,8 +266,16 @@ def test_the_banner_shows_the_key_the_documentation_and_a_request_for_each_sugge
         assert lines[lines.index(f"# {item.what}") + 1] == request
 
 
+def test_the_banner_gives_a_calendar_app_the_calendar_key_and_never_the_other_key() -> None:
+    text = banner("http://127.0.0.1:8000", KEY, CALENDAR_KEY)
+
+    lines = [line.strip() for line in text.splitlines()]
+    assert f"http://127.0.0.1:8000{CALENDAR_PATH}?key={CALENDAR_KEY}" in lines
+    assert [line for line in lines if "?key=" in line and KEY in line] == []
+
+
 def test_only_a_request_that_answers_with_a_file_tells_curl_where_to_save_it() -> None:
-    text = banner("http://127.0.0.1:8000", KEY)
+    text = banner("http://127.0.0.1:8000", KEY, CALENDAR_KEY)
 
     assert text.count("--output") == 2
     assert 'museo.pdf"' in text
@@ -234,14 +283,14 @@ def test_only_a_request_that_answers_with_a_file_tells_curl_where_to_save_it() -
 
 
 def test_the_banner_promises_a_simulated_school_and_that_nothing_is_kept() -> None:
-    text = banner("http://127.0.0.1:8000", KEY)
+    text = banner("http://127.0.0.1:8000", KEY, CALENDAR_KEY)
 
     assert "against a simulated school. It needs no account and no password." in text
     assert "everything it changes is thrown away when you stop it." in text
 
 
 def test_the_banner_uses_curl_exe_on_windows_where_curl_names_another_tool() -> None:
-    text = banner("http://127.0.0.1:8000", KEY, windows=True)
+    text = banner("http://127.0.0.1:8000", KEY, CALENDAR_KEY, windows=True)
 
     assert f'    curl.exe -H "Authorization: Bearer {KEY}"' in text
     assert "    curl -H" not in text
