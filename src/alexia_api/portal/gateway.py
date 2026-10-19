@@ -7,7 +7,9 @@ lock the account.
 """
 
 import asyncio
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
+from contextlib import asynccontextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Final, Literal
 
@@ -36,6 +38,8 @@ if TYPE_CHECKING:
 
 SESSION_FRESH_SECONDS: Final = 10 * 60
 IDLE_MINUTES_REPORTED: Final = 1
+
+_HELD: Final[ContextVar[frozenset[int]]] = ContextVar("held_gateways", default=frozenset())
 
 
 @dataclass(frozen=True, slots=True)
@@ -82,9 +86,32 @@ class Gateway:
     def child_count(self) -> int | None:
         return len(self._home.children) if self._home is not None else None
 
-    async def call[T](self, work: Callable[[Tx], Awaitable[T]]) -> T:
-        """Run a recipe with the session held, logging in first and once more if it expired."""
+    @asynccontextmanager
+    async def _turn(self) -> AsyncIterator[None]:
+        """Hold the gateway for one piece of work, or refuse if this work already holds it.
+
+        The lock cannot be taken twice by the same work, so a second request from inside a turn
+        would wait for itself forever and say nothing. It fails at once instead.
+        """
+        held = _HELD.get()
+        if id(self) in held:
+            raise RuntimeError(
+                "a recipe asked the gateway that is running it for another turn, which would "
+                "wait for itself forever, so use the session the recipe was given instead"
+            )
         async with self._lock:
+            token = _HELD.set(held | {id(self)})
+            try:
+                yield
+            finally:
+                _HELD.reset(token)
+
+    async def call[T](self, work: Callable[[Tx], Awaitable[T]]) -> T:
+        """Run a recipe with the session held, logging in first and once more if it expired.
+
+        The recipe uses the session it is given. It must not call this gateway again.
+        """
+        async with self._turn():
             await self._ensure(fresh=False)
             try:
                 result = await work(self._session)
@@ -98,7 +125,7 @@ class Gateway:
 
     async def check(self, *, fresh: bool = False) -> CheckResult:
         """Make sure there is a working session, logging in if needed, and report which."""
-        async with self._lock:
+        async with self._turn():
             state = await self._ensure(fresh=fresh)
             return CheckResult(session=state, child_count=self.child_count)
 
@@ -112,7 +139,7 @@ class Gateway:
 
     async def reset_breaker(self) -> bool:
         """Lift a block after a person fixed the cause. Returns whether there was one."""
-        async with self._lock:
+        async with self._turn():
             was_blocked = self._blocked is not None
             self._blocked = None
             await asyncio.to_thread(self._breaker.clear, self._account)

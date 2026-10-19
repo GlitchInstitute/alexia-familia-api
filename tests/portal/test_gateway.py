@@ -2,6 +2,7 @@
 
 import asyncio
 from itertools import pairwise
+from typing import TYPE_CHECKING
 
 import pytest
 
@@ -22,7 +23,11 @@ from alexia_api.portal.children import read_home
 from alexia_api.portal.gateway import Gateway
 from alexia_api.portal.session import DEFAULT_SPACING_SECONDS, Tx
 from alexia_api.sim.app import BAD_CREDENTIALS_TEXT
+from alexia_api.sim.world import DEMO_PASSWORD_B, DEMO_USER_B
 from tests.harness import Failure, Harness
+
+if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
 
 
 def connection_of(gateway: Gateway) -> Connection:
@@ -266,6 +271,39 @@ async def test_calls_never_overlap_and_share_one_login(harness: Harness) -> None
     assert all(len(snapshot.children) == 2 for snapshot in results)
     assert harness.sim.max_in_flight == 1
     assert harness.requests_to("/Validar") == 1
+
+
+@pytest.mark.parametrize("again", ["call", "check", "reset"])
+async def test_a_recipe_that_asks_its_own_gateway_for_another_turn_is_refused_and_not_left_waiting(
+    harness: Harness, again: str
+) -> None:
+    gateway = harness.gateway()
+    asks: dict[str, Callable[[], Awaitable[object]]] = {
+        "call": lambda: gateway.call(read_home),
+        "check": gateway.check,
+        "reset": gateway.reset_breaker,
+    }
+
+    async def recipe(_tx: Tx) -> None:
+        await asks[again]()
+
+    async with asyncio.timeout(5):
+        with pytest.raises(RuntimeError, match="another turn"):
+            await gateway.call(recipe)
+        assert len((await gateway.call(read_home)).children) == 2
+
+
+async def test_a_recipe_may_use_the_gateway_of_another_account(harness: Harness) -> None:
+    first = harness.gateway()
+    second = harness.gateway(
+        account="family-b", credentials=harness.credentials(DEMO_USER_B, DEMO_PASSWORD_B)
+    )
+
+    async def recipe(_tx: Tx) -> int:
+        return len((await second.call(read_home)).children)
+
+    async with asyncio.timeout(5):
+        assert await first.call(recipe) == 2
 
 
 async def test_requests_are_spaced_by_the_politeness_delay(harness: Harness) -> None:
