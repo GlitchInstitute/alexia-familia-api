@@ -1,8 +1,11 @@
 """The agenda as an iCalendar file, for a calendar app that subscribes to a URL.
 
-Each entry becomes one event. The file names the school's time zone and carries its rules, so a
-lesson at nine stays at nine on both sides of a clock change. The zone and the time of the stamp
-are passed in, and nothing here reads the system's clock.
+Each entry becomes one event. A timed entry is one instant written in UTC, so a calendar app
+needs no rules of the school's time zone to place it, and a lesson at nine stays at nine on both
+sides of a clock change. Apps differ in how well they read zone rules from a file, and a misread
+puts every summer lesson an hour off. The zone decides which day an all-day entry falls on and is
+named as the home zone of the calendar. The zone and the time of the stamp are passed in, and
+nothing here reads the system's clock.
 
 Every word the school wrote is cleaned before it goes into the file. A title can hold a line
 break, a control character, or a character that reverses the text, and none of them may change
@@ -145,18 +148,16 @@ def _vevent(entry: CalendarEntry, zone: ZoneInfo, stamped_at: datetime) -> Event
     item.add("uid", _uid(entry))
     item.add("dtstamp", stamped_at.astimezone(UTC))
     item.add("summary", _summary(entry))
-    starts = event.starts_at.astimezone(zone)
-    ends = event.ends_at.astimezone(zone)
     if event.all_day:
-        first = starts.date()
-        last = max(first, ends.date())
+        first = event.starts_at.astimezone(zone).date()
+        last = max(first, event.ends_at.astimezone(zone).date())
         item.add("dtstart", first)
         item.add("dtend", last + timedelta(days=1))
         item.add("transp", "TRANSPARENT")
     else:
-        item.add("dtstart", starts)
-        if ends > starts:
-            item.add("dtend", ends)
+        item.add("dtstart", event.starts_at.astimezone(UTC))
+        if event.ends_at > event.starts_at:
+            item.add("dtend", event.ends_at.astimezone(UTC))
     description = describe(event)
     if description:
         item.add("description", description)
@@ -181,6 +182,5 @@ def render_calendar(
     )
     for entry in ordered:
         calendar.add_component(_vevent(entry, zone, stamped_at))
-    calendar.add_missing_timezones()
     data: bytes = calendar.to_ical()
     return data

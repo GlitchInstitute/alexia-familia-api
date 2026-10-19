@@ -1,5 +1,5 @@
 import unicodedata
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta, tzinfo
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -316,12 +316,10 @@ def test_the_file_is_utf_8_and_keeps_accents_as_they_are() -> None:
     assert "X-WR-CALNAME:Lucía".encode() in data
 
 
-def test_the_file_names_the_rules_of_the_zone() -> None:
-    lines = unfolded(render(lesson()))
-    assert "BEGIN:VTIMEZONE" in lines
-    assert "TZID:Europe/Madrid" in lines
-    assert "BEGIN:DAYLIGHT" in lines
-    assert "BEGIN:STANDARD" in lines
+def test_the_file_holds_no_rules_of_a_zone_for_an_app_to_misread() -> None:
+    lines = unfolded(render(lesson(), occasion(), all_day()))
+    assert "BEGIN:VTIMEZONE" not in lines
+    assert not any("TZID" in line for line in lines)
 
 
 def test_a_lesson_is_a_timed_event_with_its_teacher_in_the_description() -> None:
@@ -333,17 +331,19 @@ def test_a_lesson_is_a_timed_event_with_its_teacher_in_the_description() -> None
     assert "TRANSP" not in event
 
 
-def test_a_timed_entry_names_the_zone_and_not_an_offset() -> None:
+def test_a_timed_entry_is_one_instant_in_utc() -> None:
     lines = unfolded(render(lesson(day=date(2026, 1, 12))))
-    assert "DTSTART;TZID=Europe/Madrid:20260112T090000" in lines
-    assert "DTEND;TZID=Europe/Madrid:20260112T094500" in lines
+    assert "DTSTART:20260112T080000Z" in lines
+    assert "DTEND:20260112T084500Z" in lines
 
 
 def test_a_lesson_stays_at_nine_on_both_sides_of_a_clock_change() -> None:
-    before, after = vevents(render(lesson(date(2026, 3, 27)), lesson(date(2026, 3, 30))))
-    first, second = before.decoded("DTSTART"), after.decoded("DTSTART")
-    assert (first.hour, second.hour) == (9, 9)
-    assert (first.utcoffset(), second.utcoffset()) == (timedelta(hours=1), timedelta(hours=2))
+    data = render(lesson(date(2026, 3, 27)), lesson(date(2026, 3, 30)))
+    lines = unfolded(data)
+    assert "DTSTART:20260327T080000Z" in lines
+    assert "DTSTART:20260330T070000Z" in lines
+    hours = [event.decoded("DTSTART").astimezone(MADRID).hour for event in vevents(data)]
+    assert hours == [9, 9]
 
 
 def test_an_entry_that_has_no_length_has_no_end() -> None:
@@ -379,8 +379,12 @@ def test_both_ways_the_portal_ends_a_one_day_holiday_make_the_same_entry(
     )
 
 
-def test_the_last_day_of_an_all_day_run_is_included() -> None:
-    event = only_event(render(all_day(first=date(2025, 12, 23), last=date(2026, 1, 7))))
+@pytest.mark.parametrize("ends_at_midnight", [True, False])
+def test_the_last_day_of_an_all_day_run_is_included(ends_at_midnight: bool) -> None:
+    run = all_day(
+        first=date(2025, 12, 23), last=date(2026, 1, 7), ends_at_midnight=ends_at_midnight
+    )
+    event = only_event(render(run))
     assert event.decoded("DTSTART") == date(2025, 12, 23)
     assert event.decoded("DTEND") == date(2026, 1, 8)
 
@@ -395,24 +399,30 @@ def test_an_all_day_entry_that_ends_before_it_starts_lasts_one_day() -> None:
     )
 
 
-def in_utc(event: AgendaEvent) -> AgendaEvent:
+ARRIVAL_ZONES = [UTC, ZoneInfo("America/New_York"), ZoneInfo("Asia/Kolkata")]
+
+
+def in_zone(event: AgendaEvent, zone: tzinfo) -> AgendaEvent:
     return event.model_copy(
         update={
-            "starts_at": event.starts_at.astimezone(UTC),
-            "ends_at": event.ends_at.astimezone(UTC),
+            "starts_at": event.starts_at.astimezone(zone),
+            "ends_at": event.ends_at.astimezone(zone),
         }
     )
 
 
-def test_a_timed_entry_given_in_another_zone_is_written_in_the_zone_of_the_file() -> None:
-    lines = unfolded(render(in_utc(lesson(day=date(2026, 1, 12)))))
-    assert "DTSTART;TZID=Europe/Madrid:20260112T090000" in lines
-    assert "DTEND;TZID=Europe/Madrid:20260112T094500" in lines
+@pytest.mark.parametrize("zone", ARRIVAL_ZONES)
+def test_a_timed_entry_is_the_same_instant_in_whatever_zone_it_arrives(zone: tzinfo) -> None:
+    arriving = in_zone(lesson(day=date(2026, 1, 12)), zone)
+    assert render(arriving) == render(lesson(day=date(2026, 1, 12)))
 
 
-def test_an_all_day_entry_given_in_another_zone_keeps_the_days_of_the_zone_of_the_file() -> None:
+@pytest.mark.parametrize("zone", ARRIVAL_ZONES)
+def test_an_all_day_entry_given_in_another_zone_keeps_the_days_of_the_zone_of_the_file(
+    zone: tzinfo,
+) -> None:
     holiday = all_day(first=date(2026, 3, 30), last=date(2026, 3, 31))
-    event = only_event(render(in_utc(holiday)))
+    event = only_event(render(in_zone(holiday, zone)))
     assert (event.decoded("DTSTART"), event.decoded("DTEND")) == (
         date(2026, 3, 30),
         date(2026, 4, 1),
@@ -599,31 +609,17 @@ ALLOWED_NAMES = frozenset(
         "UID",
         "DTSTAMP",
         "SUMMARY",
-        "DTSTART;TZID=Europe/Madrid",
-        "DTEND;TZID=Europe/Madrid",
+        "DTSTART",
+        "DTEND",
         "DESCRIPTION",
     }
 )
 
 
-def outside_the_zone(lines: list[str]) -> list[str]:
-    """The lines of a file without the definition of its time zone, which comes from tzdata."""
-    kept: list[str] = []
-    inside = False
-    for line in lines:
-        if line == "BEGIN:VTIMEZONE":
-            inside = True
-        elif line == "END:VTIMEZONE":
-            inside = False
-        elif not inside:
-            kept.append(line)
-    return kept
-
-
 @given(ANY_TEXT, ANY_TEXT)
 def test_whatever_a_name_and_a_label_say_the_file_keeps_its_shape(name: str, label: str) -> None:
     data = render(lesson(), name=name, label=label)
-    names = {line.split(":", 1)[0] for line in outside_the_zone(unfolded(data)) if line}
+    names = {line.split(":", 1)[0] for line in unfolded(data) if line}
     assert names <= ALLOWED_NAMES
     assert len(vevents(data)) == 1
 
