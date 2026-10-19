@@ -87,6 +87,9 @@ class Tx(Protocol):
 
     def now(self) -> datetime: ...
 
+    def clear_cookies(self) -> None:
+        """Forget the portal's session. The next request then counts as an expired session."""
+
 
 def decode_body(body: bytes, content_type: str | None) -> str:
     """Decode a body with the charset it declares, UTF-8 without a byte order mark by default."""

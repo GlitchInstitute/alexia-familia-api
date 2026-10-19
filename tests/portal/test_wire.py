@@ -39,6 +39,8 @@ def test_request_parameters_refuse_unknown_fields() -> None:
         lambda: wire.FolderTreeParams(is_authorization="1"),  # type: ignore[arg-type]
         lambda: wire.SelectFolderParams(folder_id="IdCarpetaBorradores"),  # type: ignore[arg-type]
         lambda: wire.SelectFolderParams(folder_id="IdCarpetaRecibidos", search_text="x"),  # type: ignore[arg-type]
+        lambda: wire.SelectFolderParams(folder_id="IdCarpetaRecibidos", is_authorization="2"),  # type: ignore[arg-type]
+        lambda: wire.SelectFolderParams(folder_id="IdCarpetaRecibidos", is_authorization=1),  # type: ignore[arg-type]
         lambda: wire.AvailableDaysParams(staff_id="not-a-guid", month=1, year=2026),
         lambda: wire.AvailableDaysParams(staff_id=GUID, month=0, year=2026),
         lambda: wire.AvailableDaysParams(staff_id=GUID, month=13, year=2026),
@@ -109,6 +111,16 @@ def test_folder_requests_carry_the_values_the_portal_expects() -> None:
     assert json.loads(chosen.model_dump_json(by_alias=True)) == {
         "idCarpeta": "IdCarpetaEnviados",
         "IsAutorizacion": "0",
+        "TextoBusqueda": "",
+    }
+
+
+def test_the_list_of_forms_is_chosen_with_the_flag_the_portal_names() -> None:
+    forms = wire.SelectFolderParams(folder_id="IdCarpetaRecibidos", is_authorization="1")
+
+    assert json.loads(forms.model_dump_json(by_alias=True)) == {
+        "idCarpeta": "IdCarpetaRecibidos",
+        "IsAutorizacion": "1",
         "TextoBusqueda": "",
     }
 

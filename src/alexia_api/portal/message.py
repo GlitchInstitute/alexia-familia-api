@@ -1,11 +1,12 @@
 """Reading one message. The list gives its row and the message page gives the rest."""
 
 import asyncio
-from datetime import datetime
-from typing import Literal
+from datetime import date, datetime
+from typing import Literal, Protocol
+from zoneinfo import ZoneInfo
 
 from alexia_api.domain.errors import PortalError, SchemaDrift, UnexpectedReply, sample_of
-from alexia_api.domain.ids import MessageId, attachment_token
+from alexia_api.domain.ids import FormId, MessageId, attachment_token
 from alexia_api.domain.messages import Attachment, MessageContent, MessageSummary, Translation
 from alexia_api.domain.time import instant_of, wall_of
 from alexia_api.portal import wire
@@ -22,7 +23,26 @@ from alexia_api.portal.session import Tx
 from alexia_api.portal.ws import call_ws
 
 
-def message_path(guid: MessageId) -> str:
+class Listed(Protocol):
+    """A row of a list, with the facts that the page of the same message has to agree with.
+
+    A form is a message that the portal lists apart, so one page reader serves both.
+    """
+
+    @property
+    def id(self) -> MessageId | FormId: ...
+
+    @property
+    def received_on(self) -> date: ...
+
+    @property
+    def subject(self) -> str: ...
+
+    @property
+    def sender(self) -> str: ...
+
+
+def message_path(guid: MessageId | FormId) -> str:
     """The address of the page that shows one message to read it."""
     return (
         f"{COMUNICADO_PAGE}?GuidComunicadoOrigen={guid}&TipoComunicado=N&AccionComunicado=1"
@@ -30,7 +50,7 @@ def message_path(guid: MessageId) -> str:
     )
 
 
-async def open_message(tx: Tx, guid: MessageId) -> None:
+async def open_message(tx: Tx, guid: MessageId | FormId) -> None:
     """Open the page of a message. The portal remembers which message the session has open."""
     await get_page(
         tx,
@@ -71,7 +91,17 @@ def _wall_of(reply: wire.MessageReply) -> datetime:
     return wall
 
 
-def _require_the_row(summary: MessageSummary, reply: wire.MessageReply) -> None:
+def sent_at_of(reply: wire.MessageReply, zone: ZoneInfo) -> datetime:
+    """When the school sent the message, to the minute, as the page says."""
+    return instant_of(_wall_of(reply), zone)
+
+
+def child_names_of(reply: wire.MessageReply) -> str | None:
+    """The names of the children that the page names, in the one text it writes them in."""
+    return _tidy(reply.child_names) or None
+
+
+def _require_the_row(listed: Listed, reply: wire.MessageReply) -> None:
     """Refuse a page that is not the message the list row describes.
 
     The portal remembers the open message in the session, so a page can show another message
@@ -79,9 +109,9 @@ def _require_the_row(summary: MessageSummary, reply: wire.MessageReply) -> None:
     message's id.
     """
     same = (
-        _wall_of(reply).date() == summary.received_on
-        and _same_text(reply.subject_1, summary.subject)
-        and (not reply.sender or _same_text(reply.sender, summary.sender))
+        _wall_of(reply).date() == listed.received_on
+        and _same_text(reply.subject_1, listed.subject)
+        and (not reply.sender or _same_text(reply.sender, listed.sender))
     )
     if not same:
         raise PortalError(UnexpectedReply(where="message page does not match the list row"))
@@ -103,16 +133,16 @@ def _render(reply: wire.MessageReply) -> tuple[Rendered, tuple[Translation, ...]
     return render_body(reply.text_1), _translations(reply)
 
 
-async def read_reply(tx: Tx, summary: MessageSummary) -> wire.MessageReply:
+async def read_reply(tx: Tx, listed: Listed) -> wire.MessageReply:
     """Open a message, ask its page for the data, and check the page is the message of the row.
 
     The portal may mark the message read when its page opens. Whether it does is not known.
     """
-    await open_message(tx, summary.id)
+    await open_message(tx, listed.id)
     reply = await call_ws(
-        tx, GET_MESSAGE_DATA, wire.EmptyParams(), referer=tx.absolute(message_path(summary.id))
+        tx, GET_MESSAGE_DATA, wire.EmptyParams(), referer=tx.absolute(message_path(listed.id))
     )
-    _require_the_row(summary, reply)
+    _require_the_row(listed, reply)
     return reply
 
 
@@ -122,7 +152,7 @@ async def read_message(tx: Tx, summary: MessageSummary) -> MessageContent:
     # A large body takes a second of CPU to clean. A thread keeps the other accounts moving.
     main, translations = await asyncio.to_thread(_render, reply)
     return MessageContent(
-        sent_at=instant_of(_wall_of(reply), tx.zone),
+        sent_at=sent_at_of(reply, tx.zone),
         body=main.body,
         links=main.links,
         attachments=tuple(
@@ -130,6 +160,6 @@ async def read_message(tx: Tx, summary: MessageSummary) -> MessageContent:
             for file in reply.files
         ),
         translations=translations,
-        child_names=_tidy(reply.child_names) or None,
+        child_names=child_names_of(reply),
         can_reply=reply.can_reply,
     )

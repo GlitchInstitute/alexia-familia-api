@@ -144,6 +144,8 @@ class SimOptions:
     """The grid feeds write their dates as year, month, and day and not as the list prints them."""
     availability_bad_entry: bool = False
     """The first text of every availability answer is not written as the portal writes it."""
+    forms_page_ignores_query: bool = False
+    """The message page lists the messages, whatever its address asks for."""
 
 
 @dataclass(slots=True)
@@ -154,6 +156,8 @@ class SimSession:
     last_activity: float = 0.0
     family: SimFamily | None = None
     folder: SimFolder = "received"
+    forms: bool = False
+    """Whether the last load of the message page asked for the forms. The grid lists by it."""
     message_guid: str | None = None
     open_agenda: tuple[agenda.SimAgendaScope, str] | None = None
     opened_grids: dict[str, str] = field(default_factory=dict)
@@ -657,8 +661,13 @@ class PortalSim:
     def _mail_of(self, session: SimSession, folder: SimFolder) -> list[SimMessage]:
         family = self._family_of(session)
         held = family.messages if family else ()
-        in_folder = (message for message in held if message.folder == folder)
+        in_folder = (message for message in held if message.folder == folder and not message.form)
         return sorted(in_folder, key=newest_first, reverse=True)
+
+    def _forms_of(self, session: SimSession) -> list[SimMessage]:
+        family = self._family_of(session)
+        held = family.messages if family else ()
+        return sorted((message for message in held if message.form), key=newest_first, reverse=True)
 
     def _folder_tree(self, session: SimSession, _params: dict[str, Any]) -> object:
         counts: dict[SimFolder, int] = {
@@ -668,6 +677,8 @@ class PortalSim:
         return folder_tree(counts, session.folder)
 
     def _select_folder(self, session: SimSession, params: dict[str, Any]) -> object:
+        if params["IsAutorizacion"] != ("1" if session.forms else "0"):
+            raise SimFaultError
         folder = FOLDER_OF_ID[str(params["idCarpeta"])]
         session.folder = folder
         return folder_selection(folder)
@@ -680,11 +691,13 @@ class PortalSim:
             )
         query = dict(request.query_params)
         ajax = request.headers.get("x-requested-with") == "XMLHttpRequest"
+        if "jqGridID" not in query:
+            return self._messages_page(session, query, ajax=ajax)
         numeric = set(query) == FEED_QUERY and all(query[n].isdecimal() for n in _FEED_NUMBERS)
         if not (ajax and numeric) or int(query["rows"]) < 1 or int(query["page"]) < 1:
             return _server_error()
         rows, page = int(query["rows"]), int(query["page"])
-        held = self._mail_of(session, session.folder)
+        held = self._forms_of(session) if session.forms else self._mail_of(session, session.folder)
         grid = {
             "page": page,
             "total": math.ceil(len(held) / rows),
@@ -693,6 +706,17 @@ class PortalSim:
             "userdata": {},
         }
         return HTMLResponse(html_safe_json(grid))
+
+    def _messages_page(self, session: SimSession, query: dict[str, str], *, ajax: bool) -> Response:
+        """Load the message page, which lists the forms when its address says so."""
+        if ajax or query not in ({}, {"autorizaciones": "1"}):
+            return _server_error()
+        session.forms = bool(query) and not self.options.forms_page_ignores_query
+        return HTMLResponse(
+            "<!DOCTYPE html><html><head><title>Comunicados</title></head><body>"
+            f'<input type="hidden" id="hidIsAutorizacion" value="{int(session.forms)}" />'
+            "</body></html>"
+        )
 
     def _feed_row(self, message: SimMessage) -> dict[str, object]:
         cells = feed_cells(message)

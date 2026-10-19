@@ -67,6 +67,9 @@ class Doctored:
     def now(self) -> datetime:
         return self._inner.now()
 
+    def clear_cookies(self) -> None:
+        self._inner.clear_cookies()
+
 
 async def fetch_doctored(
     gateway: Gateway, file: SimFile, change: Callable[[PortalResponse], PortalResponse]

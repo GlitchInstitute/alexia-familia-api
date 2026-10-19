@@ -132,6 +132,35 @@ def _sent(number: int, sender: str, subject: str, sent_at: str) -> SimMessage:
     )
 
 
+def _form(
+    number: int,
+    sender: str,
+    subject: str,
+    sent_at: str,
+    *,
+    expires: str,
+    category: str,
+    body: str,
+    child_names: str,
+) -> SimMessage:
+    date, time = sent_at.split(" ")
+    return SimMessage(
+        guid=synthetic_guid(number),
+        folder="received",
+        sender=sender,
+        subject=subject,
+        date=date,
+        time=time,
+        body_html=body,
+        read=False,
+        expires=expires,
+        category=category,
+        child_names=child_names,
+        can_reply=False,
+        form=True,
+    )
+
+
 _PDF: Final = b"%PDF-1.4\n% Archivo de ejemplo\n%%EOF\n"
 _PIXEL: Final = (
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGOYc+QJAAREAkXOJA2qAAAAAElFTkSuQmCC"
@@ -154,6 +183,14 @@ _OCTOBER_TIMETABLE: Final = (
     "<table><tr><th>Día</th><th>Clase</th></tr>"
     "<tr><td>Lunes</td><td>Matemáticas</td></tr>"
     "<tr><td>Miércoles</td><td>Música</td></tr></table>"
+)
+_ZOO_TRIP: Final = (
+    "<p>La clase de Lucía irá al zoo el 5 de noviembre.</p>"
+    "<p>Necesitamos su autorización antes del 30 de octubre.</p>"
+)
+_CANTEEN_SURVEY: Final = (
+    "<p>Queremos saber qué le parece el comedor.</p>"
+    "<p>La encuesta tiene tres preguntas y se contesta en el portal.</p>"
 )
 _TUTORING_CALL: Final = (
     "<p>La entrevista será por videollamada el jueves a las 17:00.</p>"
@@ -271,6 +308,26 @@ def _mail_of_marta() -> tuple[SimMessage, ...]:
             institutional=True,
             child_names="Lucía, Mateo",
             can_reply=False,
+        ),
+        _form(
+            0x1401,
+            "Secretaría",
+            "Autorización para la salida al zoo",
+            "2026-10-16 10:00",
+            expires="2026-10-30",
+            category="Autorizaciones",
+            body=_ZOO_TRIP,
+            child_names="Lucía",
+        ),
+        _form(
+            0x1402,
+            "Dirección",
+            "Encuesta del comedor escolar",
+            "2026-10-01 12:30",
+            expires="2026-10-20",
+            category="Encuestas",
+            body=_CANTEEN_SURVEY,
+            child_names="Lucía, Mateo",
         ),
         _sent(0x2001, "Marta", "Ausencia de Lucía", "2026-10-01 20:15"),
         _sent(0x2002, "Marta", "Consulta sobre la excursión", "2026-09-15 18:00"),

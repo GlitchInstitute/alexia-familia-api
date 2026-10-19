@@ -132,8 +132,11 @@ class AvailableHoursReply(WireModel):
 
 FolderId = Literal["IdCarpetaRecibidos", "IdCarpetaEnviados"]
 MessagesFlag = Literal["0"]
-"""The portal's `IsAutorizacion` flag. `0` lists messages. `1` lists authorization forms, which
-the folder calls do not read."""
+"""The portal's `IsAutorizacion` flag for the folder tree, which this server reads for messages
+only."""
+ListFlag = Literal["0", "1"]
+"""The same flag for choosing a folder. `0` lists messages and `1` lists forms, which the portal
+calls authorizations."""
 
 
 class FolderTreeParams(RequestModel):
@@ -148,7 +151,7 @@ class FolderTreeReply(WireModel):
 
 class SelectFolderParams(RequestModel):
     folder_id: FolderId = Field(alias="idCarpeta")
-    is_authorization: MessagesFlag = Field(default="0", alias="IsAutorizacion")
+    is_authorization: ListFlag = Field(default="0", alias="IsAutorizacion")
     search_text: Literal[""] = Field(default="", alias="TextoBusqueda")
 
 

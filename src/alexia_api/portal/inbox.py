@@ -42,7 +42,7 @@ class FeedPage:
 
 @dataclass(frozen=True, slots=True)
 class Feed:
-    """Every message of one folder, newest first."""
+    """Every row of one list, newest first. The list is a folder, or the forms."""
 
     records: int
     messages: tuple[MessageSummary, ...]
@@ -137,6 +137,18 @@ async def read_feed_page(tx: Tx, *, rows: int, page: int) -> FeedPage:
     return parse_feed_page(response.text())
 
 
+async def read_pages(
+    tx: Tx, *, page_size: int = DEFAULT_PAGE_SIZE, max_pages: int = MAX_PAGES
+) -> Feed:
+    """Read every page of the list that the portal shows now. Pages past `max_pages` are left
+    unread."""
+    first = await read_feed_page(tx, rows=page_size, page=1)
+    messages = list(first.rows)
+    for page in range(2, min(first.pages, max_pages) + 1):
+        messages.extend((await read_feed_page(tx, rows=page_size, page=page)).rows)
+    return Feed(records=first.records, messages=tuple(messages), truncated=first.pages > max_pages)
+
+
 async def read_feed(
     tx: Tx,
     folder: FolderName,
@@ -144,13 +156,9 @@ async def read_feed(
     page_size: int = DEFAULT_PAGE_SIZE,
     max_pages: int = MAX_PAGES,
 ) -> Feed:
-    """Read every page of a folder. Pages past `max_pages` are left unread.
+    """Read every page of a folder.
 
     The portal lists whichever folder its session shows, so the folder is chosen first.
     """
     await select_folder(tx, folder)
-    first = await read_feed_page(tx, rows=page_size, page=1)
-    messages = list(first.rows)
-    for page in range(2, min(first.pages, max_pages) + 1):
-        messages.extend((await read_feed_page(tx, rows=page_size, page=page)).rows)
-    return Feed(records=first.records, messages=tuple(messages), truncated=first.pages > max_pages)
+    return await read_pages(tx, page_size=page_size, max_pages=max_pages)

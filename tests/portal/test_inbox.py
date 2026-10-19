@@ -286,7 +286,7 @@ def summary_of(message: SimMessage) -> MessageSummary:
 def seeded(username: str, folder: str) -> tuple[MessageSummary, ...]:
     family = default_world().family_for(username)
     assert family is not None
-    held = [message for message in family.messages if message.folder == folder]
+    held = [message for message in family.messages if message.folder == folder and not message.form]
     held.sort(key=lambda message: (message.date, message.time), reverse=True)
     return tuple(summary_of(message) for message in held)
 

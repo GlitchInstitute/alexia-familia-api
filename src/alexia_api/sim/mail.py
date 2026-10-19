@@ -62,6 +62,8 @@ class SimMessage:
     child_names: str = ""
     can_reply: bool = True
     translations: tuple[SimTranslation, ...] = ()
+    form: bool = False
+    """The portal lists it under the forms to answer, and under no folder."""
 
 
 def newest_first(message: SimMessage) -> tuple[str, str]:
