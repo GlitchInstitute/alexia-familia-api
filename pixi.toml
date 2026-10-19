@@ -89,4 +89,5 @@ lint = { cmd = "ruff check . && ruff format --check .", description = "Check sty
 fmt = { cmd = "ruff check --fix . && ruff format .", description = "Fix style problems and format the code." }
 typecheck = { cmd = "mypy", description = "Type check with mypy in strict mode." }
 privacy = { cmd = "python scripts/check_privacy.py --history", description = "Fail when a file or a commit holds real-looking personal data." }
+docs = { cmd = "python scripts/gen_docs.py", description = "Write the pages that come from the code, such as the endpoint reference and the settings reference." }
 check = { depends-on = ["lint", "typecheck", "privacy", "cov"], description = "Run every check that CI runs." }

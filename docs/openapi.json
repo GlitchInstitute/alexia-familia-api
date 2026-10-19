@@ -1,0 +1,4431 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "alexia-familia-api",
+    "summary": "A REST API for the Alexia Familia parent portal",
+    "description": "An unofficial JSON API for the Alexia Familia parent portal. You run it yourself. It signs in to your own account and serves what the school shows you about your children.\n\n**Keys.** Send an API key as `Authorization: Bearer <key>` or in the `X-API-Key` header. Make keys with `alexia-api keys create`. A key holds scopes (`read`, `write`, `admin`, `feed`) and a list of accounts it may use. The calendar feeds also take a key that holds only the `feed` scope as `?key=`, because a calendar app cannot send a header.\n\n**Caching.** The server keeps each answer for a short time so that it stays gentle with the school's system. The `X-Cache` and `Age` headers say how an answer was found. Add `fresh=true` to ask the portal again.\n\n**Errors.** Every failure is an RFC 9457 problem document with a stable `code` and a `request_id`. A 503 means the account cannot be used until the operator acts, for example after a wrong password. A 502 or a 504 means the portal misbehaved or did not answer.\n",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/": {
+      "get": {
+        "tags": [
+          "meta"
+        ],
+        "summary": "Describe this server",
+        "description": "Names the server and says where its documentation and health checks are.",
+        "operationId": "index",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Index"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/healthz": {
+      "get": {
+        "tags": [
+          "meta"
+        ],
+        "summary": "Report that the process is alive",
+        "description": "Answers 200 whenever the process runs. It does not look at the portal, the accounts, or the key file, so a container can use it as a liveness check. It answers for any host name, even when `allowed_hosts` is set, because a platform probes with its own address.",
+        "operationId": "healthz",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/readyz": {
+      "get": {
+        "tags": [
+          "meta"
+        ],
+        "summary": "Report whether the server can serve requests",
+        "description": "Answers 200 when at least one account and at least one API key are configured, the key file can be read, and the state directory is writable. Otherwise it answers 503 and names the checks that failed. It never calls the portal. It answers for any host name, like the liveness check.",
+        "operationId": "readyz",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Readiness"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "At least one check failed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Readiness"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/accounts": {
+      "get": {
+        "tags": [
+          "accounts"
+        ],
+        "summary": "List the accounts this key may use",
+        "description": "Needs the `read` scope. It lists the accounts the key is allowed to use, with the state of each connection. It never calls the portal, so it is cheap and safe to poll.",
+        "operationId": "list_accounts",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountList"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BearerKey": []
+          },
+          {
+            "HeaderKey": []
+          }
+        ]
+      }
+    },
+    "/v1/accounts/{account}": {
+      "get": {
+        "tags": [
+          "accounts"
+        ],
+        "summary": "Show one account",
+        "description": "Needs the `read` scope. It shows the state of the connection, which switches the operator turned on, and how many children the last login listed. It never calls the portal.",
+        "operationId": "get_account",
+        "security": [
+          {
+            "BearerKey": []
+          },
+          {
+            "HeaderKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "account",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "The account's name, as the operator wrote it in the settings.",
+              "title": "Account"
+            },
+            "description": "The account's name, as the operator wrote it in the settings."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Account"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/accounts/{account}/connection/check": {
+      "post": {
+        "tags": [
+          "accounts"
+        ],
+        "summary": "Make sure the account has a working portal session",
+        "description": "Needs the `read` scope. It uses the session the server has when that still works, and logs in when it does not. A login failure that could lock the account pauses automatic logins until an operator resets the block. Use this to test new credentials.",
+        "operationId": "check_connection",
+        "security": [
+          {
+            "BearerKey": []
+          },
+          {
+            "HeaderKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "account",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "The account's name, as the operator wrote it in the settings.",
+              "title": "Account"
+            },
+            "description": "The account's name, as the operator wrote it in the settings."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectionCheck"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/accounts/{account}/connection/reset": {
+      "post": {
+        "tags": [
+          "accounts"
+        ],
+        "summary": "Lift a block on automatic logins",
+        "description": "Needs the `admin` scope. Run this only after you fixed the cause, which means correcting the password or finishing a step in the portal in a browser. The next request that needs the portal logs in again.",
+        "operationId": "reset_connection",
+        "security": [
+          {
+            "BearerKey": []
+          },
+          {
+            "HeaderKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "account",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "The account's name, as the operator wrote it in the settings.",
+              "title": "Account"
+            },
+            "description": "The account's name, as the operator wrote it in the settings."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectionReset"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/accounts/{account}/children": {
+      "get": {
+        "tags": [
+          "children"
+        ],
+        "summary": "List the children of an account",
+        "description": "Needs the `read` scope. Each child has a student id and a slug, and either one works in the other child routes. The list is stored for a while, so ask with `fresh=true` after a sibling joins the school.",
+        "operationId": "list_children",
+        "security": [
+          {
+            "BearerKey": []
+          },
+          {
+            "HeaderKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "account",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "The account's name, as the operator wrote it in the settings.",
+              "title": "Account"
+            },
+            "description": "The account's name, as the operator wrote it in the settings."
+          },
+          {
+            "name": "fresh",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Ignore the stored answer and ask the portal again. The server still paces its requests, so use this when you know something changed and not on a timer.",
+              "default": false,
+              "title": "Fresh"
+            },
+            "description": "Ignore the stored answer and ask the portal again. The server still paces its requests, so use this when you know something changed and not on a timer."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChildList"
+                }
+              }
+            },
+            "headers": {
+              "X-Cache": {
+                "description": "`hit` when the answer was stored, `miss` when it was just read from the portal, `bypass` when `fresh=true` forced a new read.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "hit",
+                    "miss",
+                    "bypass"
+                  ]
+                }
+              },
+              "Age": {
+                "description": "How many seconds old the answer is.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/accounts/{account}/children/{child}": {
+      "get": {
+        "tags": [
+          "children"
+        ],
+        "summary": "Show one child",
+        "description": "Needs the `read` scope. The child is found in the list the portal gave for this account, so a student id that belongs to another account is not found.",
+        "operationId": "get_child",
+        "security": [
+          {
+            "BearerKey": []
+          },
+          {
+            "HeaderKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "child",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "A student id, or the child's slug as the list of children shows it. Letter case does not matter.",
+              "title": "Child"
+            },
+            "description": "A student id, or the child's slug as the list of children shows it. Letter case does not matter."
+          },
+          {
+            "name": "account",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "The account's name, as the operator wrote it in the settings.",
+              "title": "Account"
+            },
+            "description": "The account's name, as the operator wrote it in the settings."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Child"
+                }
+              }
+            },
+            "headers": {
+              "X-Cache": {
+                "description": "`hit` when the answer was stored, `miss` when it was just read from the portal, `bypass` when `fresh=true` forced a new read.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "hit",
+                    "miss",
+                    "bypass"
+                  ]
+                }
+              },
+              "Age": {
+                "description": "How many seconds old the answer is.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/accounts/{account}/children/{child}/tracking": {
+      "get": {
+        "tags": [
+          "children"
+        ],
+        "summary": "Show the tracking counters of a child",
+        "description": "Needs the `read` scope. These are the five numbers in the portal's tracking widget, which count open tasks, activities, notes, tests, and incidents.",
+        "operationId": "get_tracking",
+        "security": [
+          {
+            "BearerKey": []
+          },
+          {
+            "HeaderKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "account",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "The account's name, as the operator wrote it in the settings.",
+              "title": "Account"
+            },
+            "description": "The account's name, as the operator wrote it in the settings."
+          },
+          {
+            "name": "child",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "A student id, or the child's slug as the list of children shows it. Letter case does not matter.",
+              "title": "Child"
+            },
+            "description": "A student id, or the child's slug as the list of children shows it. Letter case does not matter."
+          },
+          {
+            "name": "fresh",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Ignore the stored answer and ask the portal again. The server still paces its requests, so use this when you know something changed and not on a timer.",
+              "default": false,
+              "title": "Fresh"
+            },
+            "description": "Ignore the stored answer and ask the portal again. The server still paces its requests, so use this when you know something changed and not on a timer."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrackingCounters"
+                }
+              }
+            },
+            "headers": {
+              "X-Cache": {
+                "description": "`hit` when the answer was stored, `miss` when it was just read from the portal, `bypass` when `fresh=true` forced a new read.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "hit",
+                    "miss",
+                    "bypass"
+                  ]
+                }
+              },
+              "Age": {
+                "description": "How many seconds old the answer is.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/accounts/{account}/children/{child}/staff": {
+      "get": {
+        "tags": [
+          "children"
+        ],
+        "summary": "List the staff a guardian can meet about a child",
+        "description": "Needs the `read` scope. These are the teachers and other staff the portal offers for a meeting request. Each one has an id that meeting requests use.",
+        "operationId": "list_staff",
+        "security": [
+          {
+            "BearerKey": []
+          },
+          {
+            "HeaderKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "account",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "The account's name, as the operator wrote it in the settings.",
+              "title": "Account"
+            },
+            "description": "The account's name, as the operator wrote it in the settings."
+          },
+          {
+            "name": "child",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "A student id, or the child's slug as the list of children shows it. Letter case does not matter.",
+              "title": "Child"
+            },
+            "description": "A student id, or the child's slug as the list of children shows it. Letter case does not matter."
+          },
+          {
+            "name": "fresh",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Ignore the stored answer and ask the portal again. The server still paces its requests, so use this when you know something changed and not on a timer.",
+              "default": false,
+              "title": "Fresh"
+            },
+            "description": "Ignore the stored answer and ask the portal again. The server still paces its requests, so use this when you know something changed and not on a timer."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StaffList"
+                }
+              }
+            },
+            "headers": {
+              "X-Cache": {
+                "description": "`hit` when the answer was stored, `miss` when it was just read from the portal, `bypass` when `fresh=true` forced a new read.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "hit",
+                    "miss",
+                    "bypass"
+                  ]
+                }
+              },
+              "Age": {
+                "description": "How many seconds old the answer is.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/accounts/{account}/children/{child}/agenda": {
+      "get": {
+        "tags": [
+          "agenda"
+        ],
+        "summary": "Show the agenda of a child",
+        "description": "Needs the `read` scope. Gives the lessons and the school events of one child for a range of days, earliest first. `from` and `to` are days at the school, written YYYY-MM-DD, and both count. Without them the range is today and the six days after it. A range covers at most 366 days and lies within 1100 days of today. A range that breaks these rules, or that ends before it starts, is refused with the code `invalid_window`. A lesson names its teacher and carries the numbers the school flagged for it, which are tasks, activities, notes, and tests, and whether a substitute teacher takes it. A holiday is a school event whose title the school writes as `festivo`. A time has the offset the school has on that day, so it reads the same on both sides of a clock change. The portal answers a range with far more than was asked for, so the server keeps only the days you asked for. Each range is stored on its own for a while, and `fresh=true` reads it again. The portal shows one agenda at a time for a login, so this read waits for the other requests of the same account.",
+        "operationId": "get_child_agenda",
+        "security": [
+          {
+            "BearerKey": []
+          },
+          {
+            "HeaderKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "account",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "The account's name, as the operator wrote it in the settings.",
+              "title": "Account"
+            },
+            "description": "The account's name, as the operator wrote it in the settings."
+          },
+          {
+            "name": "child",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "A student id, or the child's slug as the list of children shows it. Letter case does not matter.",
+              "title": "Child"
+            },
+            "description": "A student id, or the child's slug as the list of children shows it. Letter case does not matter."
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "enum": [
+                      "lesson",
+                      "interview",
+                      "holiday",
+                      "school_event"
+                    ],
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Keep only entries of this kind. Repeat the parameter to keep several kinds, as in `kind=lesson&kind=interview`. Leave it out to keep every kind.",
+              "title": "Kind"
+            },
+            "description": "Keep only entries of this kind. Repeat the parameter to keep several kinds, as in `kind=lesson&kind=interview`. Leave it out to keep every kind."
+          },
+          {
+            "name": "fresh",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Ignore the stored answer and ask the portal again. The server still paces its requests, so use this when you know something changed and not on a timer.",
+              "default": false,
+              "title": "Fresh"
+            },
+            "description": "Ignore the stored answer and ask the portal again. The server still paces its requests, so use this when you know something changed and not on a timer."
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The first day of the range, written YYYY-MM-DD, counting that day. The default is today at the school.",
+              "title": "From"
+            },
+            "description": "The first day of the range, written YYYY-MM-DD, counting that day. The default is today at the school."
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The last day of the range, written YYYY-MM-DD, counting that day. The default is 6 days after `from`, so that the range is a week.",
+              "title": "To"
+            },
+            "description": "The last day of the range, written YYYY-MM-DD, counting that day. The default is 6 days after `from`, so that the range is a week."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Agenda"
+                }
+              }
+            },
+            "headers": {
+              "X-Cache": {
+                "description": "`hit` when the answer was stored, `miss` when it was just read from the portal, `bypass` when `fresh=true` forced a new read.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "hit",
+                    "miss",
+                    "bypass"
+                  ]
+                }
+              },
+              "Age": {
+                "description": "How many seconds old the answer is.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/accounts/{account}/guardian/agenda": {
+      "get": {
+        "tags": [
+          "agenda"
+        ],
+        "summary": "Show the agenda of the guardian",
+        "description": "Needs the `read` scope. Gives the interviews with the school and the school events that the portal shows the guardian, for a range of days, earliest first. The range works as it does for a child, down to the `invalid_window` refusal. A login for which the portal lists no guardian has no such agenda, and the answer is a 404 with the code `guardian_not_found`. `fresh=true` also reads the list of children again, so a guardian that the portal has just begun to list is found.",
+        "operationId": "get_guardian_agenda",
+        "security": [
+          {
+            "BearerKey": []
+          },
+          {
+            "HeaderKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "account",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "The account's name, as the operator wrote it in the settings.",
+              "title": "Account"
+            },
+            "description": "The account's name, as the operator wrote it in the settings."
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "enum": [
+                      "lesson",
+                      "interview",
+                      "holiday",
+                      "school_event"
+                    ],
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Keep only entries of this kind. Repeat the parameter to keep several kinds, as in `kind=lesson&kind=interview`. Leave it out to keep every kind.",
+              "title": "Kind"
+            },
+            "description": "Keep only entries of this kind. Repeat the parameter to keep several kinds, as in `kind=lesson&kind=interview`. Leave it out to keep every kind."
+          },
+          {
+            "name": "fresh",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Ignore the stored answer and ask the portal again. The server still paces its requests, so use this when you know something changed and not on a timer.",
+              "default": false,
+              "title": "Fresh"
+            },
+            "description": "Ignore the stored answer and ask the portal again. The server still paces its requests, so use this when you know something changed and not on a timer."
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The first day of the range, written YYYY-MM-DD, counting that day. The default is today at the school.",
+              "title": "From"
+            },
+            "description": "The first day of the range, written YYYY-MM-DD, counting that day. The default is today at the school."
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The last day of the range, written YYYY-MM-DD, counting that day. The default is 6 days after `from`, so that the range is a week.",
+              "title": "To"
+            },
+            "description": "The last day of the range, written YYYY-MM-DD, counting that day. The default is 6 days after `from`, so that the range is a week."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Agenda"
+                }
+              }
+            },
+            "headers": {
+              "X-Cache": {
+                "description": "`hit` when the answer was stored, `miss` when it was just read from the portal, `bypass` when `fresh=true` forced a new read.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "hit",
+                    "miss",
+                    "bypass"
+                  ]
+                }
+              },
+              "Age": {
+                "description": "How many seconds old the answer is.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/accounts/{account}/children/{child}/agenda.ics": {
+      "get": {
+        "tags": [
+          "agenda"
+        ],
+        "summary": "Subscribe to the calendar of a child",
+        "description": "Needs the `feed` scope, which every other scope includes. Gives an iCalendar file that a calendar app can subscribe to, with the lessons, the school events, and the holidays of one child. It reaches back `back` days and ahead `ahead` days from today at the school, and it lists lessons only for the next `lessons_ahead` days. A holiday or any other entry that lasts all day shows as free time. A lesson says its teacher and what the school flagged for it. Calendar apps cannot send a header, so this route also takes the key as `?key=`, but only a key that holds nothing but the `feed` scope. Make one with `alexia-api keys create NAME --scope feed`. A key with another scope is refused in a URL even when it is right, so an address that leaks opens calendars and nothing else. There is no `fresh` option, because this address is meant to be handed to other software. When the portal cannot be read, the answer is a problem and not a shorter calendar, so an app keeps what it had.",
+        "operationId": "get_child_calendar",
+        "security": [
+          {
+            "BearerKey": []
+          },
+          {
+            "HeaderKey": []
+          },
+          {
+            "FeedKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "account",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "The account's name, as the operator wrote it in the settings.",
+              "title": "Account"
+            },
+            "description": "The account's name, as the operator wrote it in the settings."
+          },
+          {
+            "name": "child",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "A student id, or the child's slug as the list of children shows it. Letter case does not matter.",
+              "title": "Child"
+            },
+            "description": "A student id, or the child's slug as the list of children shows it. Letter case does not matter."
+          },
+          {
+            "name": "back",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 366,
+              "minimum": 0,
+              "description": "How many days before today the calendar reaches.",
+              "default": 14,
+              "title": "Back"
+            },
+            "description": "How many days before today the calendar reaches."
+          },
+          {
+            "name": "ahead",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 366,
+              "minimum": 0,
+              "description": "How many days after today the calendar reaches.",
+              "default": 180,
+              "title": "Ahead"
+            },
+            "description": "How many days after today the calendar reaches."
+          },
+          {
+            "name": "lessons_ahead",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 366,
+              "minimum": 0,
+              "description": "How many days after today lessons are listed. The school's timetable for the far future is only a guess, and holidays and changes have not reached it, so lessons stop sooner than the rest.",
+              "default": 90,
+              "title": "Lessons Ahead"
+            },
+            "description": "How many days after today lessons are listed. The school's timetable for the far future is only a guess, and holidays and changes have not reached it, so lessons stop sooner than the rest."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "An iCalendar file.",
+            "content": {
+              "text/calendar": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "headers": {
+              "X-Cache": {
+                "description": "`hit` when the answer was stored, `miss` when it was just read from the portal, `bypass` when `fresh=true` forced a new read.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "hit",
+                    "miss",
+                    "bypass"
+                  ]
+                }
+              },
+              "Age": {
+                "description": "How many seconds old the answer is.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/accounts/{account}/guardian/agenda.ics": {
+      "get": {
+        "tags": [
+          "agenda"
+        ],
+        "summary": "Subscribe to the calendar of the guardian",
+        "description": "Needs the `feed` scope, which every other scope includes. Gives an iCalendar file with the interviews and the school events that the portal shows the guardian. It reaches back `back` days and ahead `ahead` days from today at the school. A login for which the portal lists no guardian has no such calendar, and the answer is a 404 with the code `guardian_not_found`. Calendar apps cannot send a header, so this route also takes the key as `?key=`, but only a key that holds nothing but the `feed` scope. Make one with `alexia-api keys create NAME --scope feed`. A key with another scope is refused in a URL even when it is right, so an address that leaks opens calendars and nothing else. There is no `fresh` option, because this address is meant to be handed to other software. When the portal cannot be read, the answer is a problem and not a shorter calendar, so an app keeps what it had.",
+        "operationId": "get_guardian_calendar",
+        "security": [
+          {
+            "BearerKey": []
+          },
+          {
+            "HeaderKey": []
+          },
+          {
+            "FeedKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "account",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "The account's name, as the operator wrote it in the settings.",
+              "title": "Account"
+            },
+            "description": "The account's name, as the operator wrote it in the settings."
+          },
+          {
+            "name": "back",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 366,
+              "minimum": 0,
+              "description": "How many days before today the calendar reaches.",
+              "default": 14,
+              "title": "Back"
+            },
+            "description": "How many days before today the calendar reaches."
+          },
+          {
+            "name": "ahead",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 366,
+              "minimum": 0,
+              "description": "How many days after today the calendar reaches.",
+              "default": 180,
+              "title": "Ahead"
+            },
+            "description": "How many days after today the calendar reaches."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "An iCalendar file.",
+            "content": {
+              "text/calendar": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "headers": {
+              "X-Cache": {
+                "description": "`hit` when the answer was stored, `miss` when it was just read from the portal, `bypass` when `fresh=true` forced a new read.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "hit",
+                    "miss",
+                    "bypass"
+                  ]
+                }
+              },
+              "Age": {
+                "description": "How many seconds old the answer is.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/accounts/{account}/agenda.ics": {
+      "get": {
+        "tags": [
+          "agenda"
+        ],
+        "summary": "Subscribe to one calendar for the whole family",
+        "description": "Needs the `feed` scope, which every other scope includes. Gives one iCalendar file with the lessons and school events of every child of the account and the guardian's interviews. Each entry of a child starts with the child's first name, or with the first name and the slug when two children share a first name. A holiday that the whole school shares appears once and has no name in front of it. Lessons stop after `lessons_ahead` days, as for a single child. The file is all or nothing, so one child whose agenda cannot be read fails the whole file, and a calendar app does not take the missing entries for entries that the school removed. Calendar apps cannot send a header, so this route also takes the key as `?key=`, but only a key that holds nothing but the `feed` scope. Make one with `alexia-api keys create NAME --scope feed`. A key with another scope is refused in a URL even when it is right, so an address that leaks opens calendars and nothing else. There is no `fresh` option, because this address is meant to be handed to other software. When the portal cannot be read, the answer is a problem and not a shorter calendar, so an app keeps what it had.",
+        "operationId": "get_family_calendar",
+        "security": [
+          {
+            "BearerKey": []
+          },
+          {
+            "HeaderKey": []
+          },
+          {
+            "FeedKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "account",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "The account's name, as the operator wrote it in the settings.",
+              "title": "Account"
+            },
+            "description": "The account's name, as the operator wrote it in the settings."
+          },
+          {
+            "name": "back",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 366,
+              "minimum": 0,
+              "description": "How many days before today the calendar reaches.",
+              "default": 14,
+              "title": "Back"
+            },
+            "description": "How many days before today the calendar reaches."
+          },
+          {
+            "name": "ahead",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 366,
+              "minimum": 0,
+              "description": "How many days after today the calendar reaches.",
+              "default": 180,
+              "title": "Ahead"
+            },
+            "description": "How many days after today the calendar reaches."
+          },
+          {
+            "name": "lessons_ahead",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 366,
+              "minimum": 0,
+              "description": "How many days after today lessons are listed. The school's timetable for the far future is only a guess, and holidays and changes have not reached it, so lessons stop sooner than the rest.",
+              "default": 90,
+              "title": "Lessons Ahead"
+            },
+            "description": "How many days after today lessons are listed. The school's timetable for the far future is only a guess, and holidays and changes have not reached it, so lessons stop sooner than the rest."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "An iCalendar file.",
+            "content": {
+              "text/calendar": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "headers": {
+              "X-Cache": {
+                "description": "`hit` when the answer was stored, `miss` when it was just read from the portal, `bypass` when `fresh=true` forced a new read.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "hit",
+                    "miss",
+                    "bypass"
+                  ]
+                }
+              },
+              "Age": {
+                "description": "How many seconds old the answer is.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/accounts/{account}/folders": {
+      "get": {
+        "tags": [
+          "messages"
+        ],
+        "summary": "List the message folders of an account",
+        "description": "Needs the `read` scope. This server serves the received and the sent folders. The `count` of a folder is the number the portal prints after its name. The portal does not say whether it counts every message or only the unread ones, so use it as a hint.",
+        "operationId": "list_folders",
+        "security": [
+          {
+            "BearerKey": []
+          },
+          {
+            "HeaderKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "account",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "The account's name, as the operator wrote it in the settings.",
+              "title": "Account"
+            },
+            "description": "The account's name, as the operator wrote it in the settings."
+          },
+          {
+            "name": "fresh",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Ignore the stored answer and ask the portal again. The server still paces its requests, so use this when you know something changed and not on a timer.",
+              "default": false,
+              "title": "Fresh"
+            },
+            "description": "Ignore the stored answer and ask the portal again. The server still paces its requests, so use this when you know something changed and not on a timer."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FolderList"
+                }
+              }
+            },
+            "headers": {
+              "X-Cache": {
+                "description": "`hit` when the answer was stored, `miss` when it was just read from the portal, `bypass` when `fresh=true` forced a new read.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "hit",
+                    "miss",
+                    "bypass"
+                  ]
+                }
+              },
+              "Age": {
+                "description": "How many seconds old the answer is.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/accounts/{account}/messages": {
+      "get": {
+        "tags": [
+          "messages"
+        ],
+        "summary": "List the messages in a folder",
+        "description": "Needs the `read` scope. Messages come newest first, a page at a time. The portal belongs to the guardian and not to a child, so the list holds the messages for every child of the account. The server reads the whole folder from the portal once and stores it, so paging through it costs the portal a single read. Ask with `fresh=true` to see a message that arrived a moment ago.",
+        "operationId": "list_messages",
+        "security": [
+          {
+            "BearerKey": []
+          },
+          {
+            "HeaderKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "account",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "The account's name, as the operator wrote it in the settings.",
+              "title": "Account"
+            },
+            "description": "The account's name, as the operator wrote it in the settings."
+          },
+          {
+            "name": "folder",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "received",
+                "sent"
+              ],
+              "type": "string",
+              "description": "Which folder to list.",
+              "default": "received",
+              "title": "Folder"
+            },
+            "description": "Which folder to list."
+          },
+          {
+            "name": "unread",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "`true` keeps the messages that are not known to be read. `false` keeps the ones that were read. Leave it out to keep every message.",
+              "title": "Unread"
+            },
+            "description": "`true` keeps the messages that are not known to be read. `false` keeps the ones that were read. Leave it out to keep every message."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "description": "The most messages to return in one page.",
+              "default": 25,
+              "title": "Limit"
+            },
+            "description": "The most messages to return in one page."
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "How many matching messages to skip.",
+              "default": 0,
+              "title": "Offset"
+            },
+            "description": "How many matching messages to skip."
+          },
+          {
+            "name": "fresh",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Ignore the stored answer and ask the portal again. The server still paces its requests, so use this when you know something changed and not on a timer.",
+              "default": false,
+              "title": "Fresh"
+            },
+            "description": "Ignore the stored answer and ask the portal again. The server still paces its requests, so use this when you know something changed and not on a timer."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessagePage"
+                }
+              }
+            },
+            "headers": {
+              "X-Cache": {
+                "description": "`hit` when the answer was stored, `miss` when it was just read from the portal, `bypass` when `fresh=true` forced a new read.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "hit",
+                    "miss",
+                    "bypass"
+                  ]
+                }
+              },
+              "Age": {
+                "description": "How many seconds old the answer is.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/accounts/{account}/messages/{message}": {
+      "get": {
+        "tags": [
+          "messages"
+        ],
+        "summary": "Read one message",
+        "description": "Needs the `read` scope. Gives the message as the list shows it, together with when the school sent it, its words, the addresses in them, and its files. The message must be in the list of the folder you name, so a message the family sent needs `folder=sent`. `body.html` is safe to show, and `body.text` holds the same words as plain text. The server stores a message after it reads it, so asking again is cheap. `fresh=true` reads the message again, and the list of its folder too. Opening a message in the portal may mark it as read there, and this server cannot tell whether it does. The `read` field comes from the list, so it shows the state from before the message was opened.",
+        "operationId": "get_message",
+        "security": [
+          {
+            "BearerKey": []
+          },
+          {
+            "HeaderKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "message",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "The message's id, as the list of messages shows it. Letter case does not matter.",
+              "title": "Message"
+            },
+            "description": "The message's id, as the list of messages shows it. Letter case does not matter."
+          },
+          {
+            "name": "account",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "The account's name, as the operator wrote it in the settings.",
+              "title": "Account"
+            },
+            "description": "The account's name, as the operator wrote it in the settings."
+          },
+          {
+            "name": "folder",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "received",
+                "sent"
+              ],
+              "type": "string",
+              "description": "The folder the message is in. A message the family sent is in `sent`.",
+              "default": "received",
+              "title": "Folder"
+            },
+            "description": "The folder the message is in. A message the family sent is in `sent`."
+          },
+          {
+            "name": "fresh",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Ignore the stored answer and ask the portal again. The server still paces its requests, so use this when you know something changed and not on a timer.",
+              "default": false,
+              "title": "Fresh"
+            },
+            "description": "Ignore the stored answer and ask the portal again. The server still paces its requests, so use this when you know something changed and not on a timer."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Message"
+                }
+              }
+            },
+            "headers": {
+              "X-Cache": {
+                "description": "`hit` when the answer was stored, `miss` when it was just read from the portal, `bypass` when `fresh=true` forced a new read.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "hit",
+                    "miss",
+                    "bypass"
+                  ]
+                }
+              },
+              "Age": {
+                "description": "How many seconds old the answer is.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/accounts/{account}/messages/{message}/attachments/{attachment}": {
+      "get": {
+        "tags": [
+          "messages"
+        ],
+        "summary": "Download one file of a message",
+        "description": "Needs the `read` scope. Gives the bytes of one file that the `attachments` of the message list. The server fetches the file from the portal every time and keeps nothing, so you always get the file as it is now. The message must be in the list of the folder you name, so a message the family sent needs `folder=sent`. A file larger than the operator's `max_attachment_mib` is refused with a 413 and the code `attachment_too_large`. The portal sends every file as a plain stream of bytes, so the `Content-Type` is judged from the first bytes of the file. A web page or a vector picture is never named as one. It comes as `text/plain`, so a client that shows a file by its type cannot be made to run it. The answer always asks the client to save the file. `fresh=true` reads the list of the message's folder again, which a message that arrived a moment ago needs.",
+        "operationId": "download_attachment",
+        "security": [
+          {
+            "BearerKey": []
+          },
+          {
+            "HeaderKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "message",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "The message's id, as the list of messages shows it. Letter case does not matter.",
+              "title": "Message"
+            },
+            "description": "The message's id, as the list of messages shows it. Letter case does not matter."
+          },
+          {
+            "name": "attachment",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "The file's id, as the `attachments` of the message show it. Use it as it is, because it is an opaque token and not the portal's own id.",
+              "title": "Attachment"
+            },
+            "description": "The file's id, as the `attachments` of the message show it. Use it as it is, because it is an opaque token and not the portal's own id."
+          },
+          {
+            "name": "account",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "The account's name, as the operator wrote it in the settings.",
+              "title": "Account"
+            },
+            "description": "The account's name, as the operator wrote it in the settings."
+          },
+          {
+            "name": "folder",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "received",
+                "sent"
+              ],
+              "type": "string",
+              "description": "The folder the message is in. A message the family sent is in `sent`.",
+              "default": "received",
+              "title": "Folder"
+            },
+            "description": "The folder the message is in. A message the family sent is in `sent`."
+          },
+          {
+            "name": "fresh",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Ignore the stored answer and ask the portal again. The server still paces its requests, so use this when you know something changed and not on a timer.",
+              "default": false,
+              "title": "Fresh"
+            },
+            "description": "Ignore the stored answer and ask the portal again. The server still paces its requests, so use this when you know something changed and not on a timer."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The file itself.",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            },
+            "headers": {
+              "Content-Disposition": {
+                "description": "Always `attachment`, with the file's name in a form that is safe to save under.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Content Too Large",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Account": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "The account's short name in URLs, chosen by the operator."
+          },
+          "label": {
+            "type": "string",
+            "title": "Label",
+            "description": "A name for people, for example the guardian's first name. It also names the family calendar and the guardian calendar."
+          },
+          "portal_host": {
+            "type": "string",
+            "title": "Portal Host",
+            "description": "The host name of the portal this account signs in to."
+          },
+          "connection": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/LoggedOut"
+              },
+              {
+                "$ref": "#/components/schemas/LoggedIn"
+              },
+              {
+                "$ref": "#/components/schemas/Blocked"
+              }
+            ],
+            "title": "Connection",
+            "discriminator": {
+              "propertyName": "state",
+              "mapping": {
+                "blocked": "#/components/schemas/Blocked",
+                "logged_in": "#/components/schemas/LoggedIn",
+                "logged_out": "#/components/schemas/LoggedOut"
+              }
+            }
+          },
+          "capabilities": {
+            "$ref": "#/components/schemas/Capabilities"
+          },
+          "child_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Child Count",
+            "description": "Children seen at the last login, or null before the first login."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "label",
+          "portal_host",
+          "connection",
+          "capabilities",
+          "child_count"
+        ],
+        "title": "Account",
+        "description": "One set of portal credentials. It holds the children that the portal lists for it."
+      },
+      "AccountList": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/Account"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "AccountList"
+      },
+      "Agenda": {
+        "properties": {
+          "from": {
+            "type": "string",
+            "format": "date",
+            "title": "From",
+            "description": "The first day of the range, inclusive. It is the day that was asked for."
+          },
+          "to": {
+            "type": "string",
+            "format": "date",
+            "title": "To",
+            "description": "The last day of the range, inclusive."
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AgendaEvent"
+            },
+            "type": "array",
+            "title": "Items",
+            "description": "The entries that touch the range, earliest first, with the kinds asked for."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "from",
+          "to",
+          "items"
+        ],
+        "title": "Agenda",
+        "description": "The entries of an agenda over a range of days, in the order they happen."
+      },
+      "AgendaEvent": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Id",
+            "description": "Names this occurrence and no other. The portal gives a lesson the same id every week, so this id is the portal's id, a `|`, and the day, as in `<id>|2026-10-19`."
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "lesson",
+              "interview",
+              "holiday",
+              "school_event"
+            ],
+            "title": "Kind",
+            "description": "`lesson` for a lesson of the timetable, `interview` for a meeting with a teacher, `holiday` for a school event that the school titles `festivo`, and `school_event` for everything else the school puts in the agenda."
+          },
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "description": "The title as the school writes it, in the school's language."
+          },
+          "teacher": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Teacher",
+            "description": "The teacher the portal names for the entry, or null when it names none."
+          },
+          "starts_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Starts At",
+            "description": "When the entry starts, with the school's offset. The portal writes local time and marks it as UTC by mistake, and this server puts the right offset on it."
+          },
+          "ends_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Ends At",
+            "description": "When the entry ends, with the school's offset."
+          },
+          "all_day": {
+            "type": "boolean",
+            "title": "All Day",
+            "description": "True when the entry covers whole days. The portal gives such an entry the times 00:00 and 00:00 or 23:59, and the days it covers run from `starts_at` to `ends_at`."
+          },
+          "signals": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LessonSignals"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What the school flags on a lesson. Null for any other kind of entry."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "title",
+          "teacher",
+          "starts_at",
+          "ends_at",
+          "all_day",
+          "signals"
+        ],
+        "title": "AgendaEvent",
+        "description": "One entry of the school agenda."
+      },
+      "Attachment": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "A token that names the file within its message. Treat it as opaque. It is safe to put in a URL path, and the download address of the file ends with it."
+          },
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "The file's name as the sender gave it."
+          },
+          "size": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Size",
+            "description": "The file's size in bytes, as the portal lists it."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "size"
+        ],
+        "title": "Attachment",
+        "description": "A file that came with a message."
+      },
+      "Blocked": {
+        "properties": {
+          "state": {
+            "type": "string",
+            "const": "blocked",
+            "title": "State",
+            "default": "blocked"
+          },
+          "cause": {
+            "type": "string",
+            "enum": [
+              "invalid_credentials",
+              "refused_login",
+              "mfa_required",
+              "action_required_in_portal",
+              "state_unreadable"
+            ],
+            "title": "Cause",
+            "description": "The failure that paused automatic logins."
+          },
+          "since": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Since",
+            "description": "When the block started."
+          },
+          "interstitial": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "CambiarPws",
+                  "TxtLegales",
+                  "OKCuenta",
+                  "MatOnline",
+                  "Classroom"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Interstitial",
+            "description": "The portal page that needs a person, when the cause is a required step."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "state",
+          "cause",
+          "since",
+          "interstitial"
+        ],
+        "title": "Blocked",
+        "description": "Automatic logins are paused until an operator resets the block.\n\nA wrong password can lock a guardian's account, so the server stops after the first login\nfailure that could do that and waits for a person to fix the cause."
+      },
+      "Body": {
+        "properties": {
+          "html": {
+            "type": "string",
+            "title": "Html",
+            "description": "The message as HTML that is safe to show. Scripts, styles, forms, frames, and event handlers are gone, and so are classes and inline styles. A link keeps only an `http`, `https`, `mailto`, or `tel` address. An image stays only when the message carries it inline as a PNG, JPEG, GIF, or WebP picture."
+          },
+          "text": {
+            "type": "string",
+            "title": "Text",
+            "description": "The message as plain text. A blank line separates paragraphs. A list item starts with `- `, or with its number and a dot in a numbered list, and a list inside a list is indented by two spaces. Table cells in a row are separated by ` | `. A link shows its address in parentheses after its words."
+          },
+          "simplified": {
+            "type": "boolean",
+            "title": "Simplified",
+            "description": "True when the message was nested too deeply to read as HTML. Then `html` holds only the words of the message, in one paragraph."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "html",
+          "text",
+          "simplified"
+        ],
+        "title": "Body",
+        "description": "The words of a message, as safe HTML and as plain text."
+      },
+      "Capabilities": {
+        "properties": {
+          "writes": {
+            "type": "boolean",
+            "title": "Writes",
+            "description": "Messages and meeting requests may be sent through the outbox."
+          },
+          "forms": {
+            "type": "boolean",
+            "title": "Forms",
+            "description": "Forms may be answered. This needs writes as well."
+          },
+          "restore_unread": {
+            "type": "boolean",
+            "title": "Restore Unread",
+            "description": "A message opened through the API is put back to unread at the portal."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "writes",
+          "forms",
+          "restore_unread"
+        ],
+        "title": "Capabilities",
+        "description": "What the operator switched on for an account."
+      },
+      "Child": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "The portal's student id. Most per-child calls use it, and so do URLs."
+          },
+          "person_id": {
+            "type": "string",
+            "title": "Person Id",
+            "description": "The portal's person id for the child. The agenda and the photo use it."
+          },
+          "slug": {
+            "type": "string",
+            "title": "Slug",
+            "description": "A short name for URLs, made from the first name. The operator can pin it."
+          },
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "The full name as the portal shows it."
+          },
+          "first_name": {
+            "type": "string",
+            "title": "First Name"
+          },
+          "relation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Relation",
+            "description": "How the portal labels the relation to the guardian, when it shows one."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "person_id",
+          "slug",
+          "name",
+          "first_name",
+          "relation"
+        ],
+        "title": "Child",
+        "description": "One child of the signed-in guardian."
+      },
+      "ChildList": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/Child"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "ChildList"
+      },
+      "ConnectionCheck": {
+        "properties": {
+          "session": {
+            "type": "string",
+            "enum": [
+              "new",
+              "reused"
+            ],
+            "title": "Session",
+            "description": "Whether the server had to log in, or the session it had still worked."
+          },
+          "child_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Child Count",
+            "description": "How many children the login lists."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "session",
+          "child_count"
+        ],
+        "title": "ConnectionCheck",
+        "description": "The result of making sure the account has a working portal session."
+      },
+      "ConnectionReset": {
+        "properties": {
+          "was_blocked": {
+            "type": "boolean",
+            "title": "Was Blocked",
+            "description": "Whether logins had been paused before the reset."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "was_blocked"
+        ],
+        "title": "ConnectionReset",
+        "description": "The result of lifting a block."
+      },
+      "FieldProblem": {
+        "properties": {
+          "location": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location",
+            "description": "Where the problem is, for example [\"query\", \"fresh\"]."
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "location",
+          "message"
+        ],
+        "title": "FieldProblem",
+        "description": "One thing wrong with the request, and where it was."
+      },
+      "Folder": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": [
+              "received",
+              "sent"
+            ],
+            "title": "Name",
+            "description": "`received` or `sent`. The message routes take this name."
+          },
+          "label": {
+            "type": "string",
+            "title": "Label",
+            "description": "The folder's name as the portal shows it, in the school's language."
+          },
+          "count": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Count",
+            "description": "The number the portal prints next to the folder's name, or null when it prints none. Treat it as a hint. The message list reports the exact total."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "label",
+          "count"
+        ],
+        "title": "Folder",
+        "description": "A folder of messages, as the portal lists it."
+      },
+      "FolderList": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/Folder"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "FolderList"
+      },
+      "Health": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "ok",
+            "title": "Status"
+          },
+          "version": {
+            "type": "string",
+            "title": "Version"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "status",
+          "version"
+        ],
+        "title": "Health",
+        "description": "The process is up. This says nothing about the portal."
+      },
+      "Index": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "version": {
+            "type": "string",
+            "title": "Version"
+          },
+          "docs": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Docs",
+            "description": "The interactive documentation, or null when it is off."
+          },
+          "openapi": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Openapi",
+            "description": "The OpenAPI document, or null when it is off."
+          },
+          "health": {
+            "type": "string",
+            "title": "Health",
+            "description": "The liveness check."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "version",
+          "docs",
+          "openapi",
+          "health"
+        ],
+        "title": "Index",
+        "description": "Where things are on this server."
+      },
+      "LessonSignals": {
+        "properties": {
+          "tasks": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Tasks",
+            "description": "Homework and tasks tied to the lesson."
+          },
+          "activities": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Activities",
+            "description": "Activities tied to the lesson."
+          },
+          "notes": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Notes",
+            "description": "Teacher notes tied to the lesson."
+          },
+          "tests": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Tests",
+            "description": "Tests and quizzes tied to the lesson."
+          },
+          "substitution": {
+            "type": "boolean",
+            "title": "Substitution",
+            "description": "True when a substitute teacher takes the lesson."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "tasks",
+          "activities",
+          "notes",
+          "tests",
+          "substitution"
+        ],
+        "title": "LessonSignals",
+        "description": "What the school flags on one lesson. A zero or a false means that nothing is flagged."
+      },
+      "Link": {
+        "properties": {
+          "url": {
+            "type": "string",
+            "title": "Url",
+            "description": "The address as the message writes it."
+          },
+          "host": {
+            "type": "string",
+            "title": "Host",
+            "description": "The host the address points to, without a leading `www.`. For a mail address, the part after the `@`."
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "email",
+              "video_call",
+              "form",
+              "video",
+              "document",
+              "other"
+            ],
+            "title": "Kind",
+            "description": "What the address is for, judged from its host and its file name. `other` when it is none of the kinds this API knows."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "url",
+          "host",
+          "kind"
+        ],
+        "title": "Link",
+        "description": "An address that a message mentions, in a link or in its words."
+      },
+      "LoggedIn": {
+        "properties": {
+          "state": {
+            "type": "string",
+            "const": "logged_in",
+            "title": "State",
+            "default": "logged_in"
+          },
+          "since": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Since",
+            "description": "When this session logged in."
+          },
+          "last_success_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Last Success At",
+            "description": "When the portal last answered a call."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "state",
+          "since",
+          "last_success_at"
+        ],
+        "title": "LoggedIn",
+        "description": "A session is open and the portal answered it recently."
+      },
+      "LoggedOut": {
+        "properties": {
+          "state": {
+            "type": "string",
+            "const": "logged_out",
+            "title": "State",
+            "default": "logged_out"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "state"
+        ],
+        "title": "LoggedOut",
+        "description": "No session is open. The next request that needs the portal logs in first."
+      },
+      "Message": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "The portal's message id. The detail and attachment routes take it."
+          },
+          "read": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Read",
+            "description": "Whether the guardian has read the message, or null when the portal's icon is not one this API knows."
+          },
+          "institutional": {
+            "type": "boolean",
+            "title": "Institutional",
+            "description": "True for a message sent in the school's own name."
+          },
+          "sender": {
+            "type": "string",
+            "title": "Sender",
+            "description": "The sender's name as the portal shows it."
+          },
+          "subject": {
+            "type": "string",
+            "title": "Subject"
+          },
+          "received_on": {
+            "type": "string",
+            "format": "date",
+            "title": "Received On",
+            "description": "The day the portal lists the message under, on the school's calendar."
+          },
+          "expires_on": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires On",
+            "description": "The last day the portal shows the message, when it has one."
+          },
+          "anonymous": {
+            "type": "boolean",
+            "title": "Anonymous",
+            "description": "True when the portal marks the message as anonymous."
+          },
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category",
+            "description": "The category the portal files the message under."
+          },
+          "has_attachments": {
+            "type": "boolean",
+            "title": "Has Attachments",
+            "description": "True when the portal shows a paperclip."
+          },
+          "sent_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Sent At",
+            "description": "When the school sent the message, to the minute, with the school's offset. The list gives only a day, and the time comes from the message itself."
+          },
+          "body": {
+            "$ref": "#/components/schemas/Body",
+            "description": "The words of the message."
+          },
+          "links": {
+            "items": {
+              "$ref": "#/components/schemas/Link"
+            },
+            "type": "array",
+            "title": "Links",
+            "description": "The addresses in the body, each once. The ones in links come first, then the ones written out in the words. Translations are not searched."
+          },
+          "attachments": {
+            "items": {
+              "$ref": "#/components/schemas/Attachment"
+            },
+            "type": "array",
+            "title": "Attachments"
+          },
+          "translations": {
+            "items": {
+              "$ref": "#/components/schemas/Translation"
+            },
+            "type": "array",
+            "title": "Translations",
+            "description": "Other versions of the message, second before third. Empty when there are none."
+          },
+          "child_names": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Child Names",
+            "description": "The names of the children the portal says the message is about, in the one text the portal writes them in, or null when it names none. The portal gives names and no ids, so this API cannot tie them to its list of children."
+          },
+          "can_reply": {
+            "type": "boolean",
+            "title": "Can Reply",
+            "description": "Whether the portal offers a reply to this message."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "read",
+          "institutional",
+          "sender",
+          "subject",
+          "received_on",
+          "expires_on",
+          "anonymous",
+          "category",
+          "has_attachments",
+          "sent_at",
+          "body",
+          "links",
+          "attachments",
+          "translations",
+          "child_names",
+          "can_reply"
+        ],
+        "title": "Message",
+        "description": "A message with its words. The fields of its row in the list come first."
+      },
+      "MessagePage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MessageSummary"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total",
+            "description": "How many messages match, counting every page. It counts the messages this server holds, which is fewer than the portal lists when `truncated` is true."
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit",
+            "description": "The page size that was asked for."
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset",
+            "description": "How many matching messages come before this page."
+          },
+          "next_offset": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Offset",
+            "description": "The offset to ask for the next page, or null on the last page."
+          },
+          "truncated": {
+            "type": "boolean",
+            "title": "Truncated",
+            "description": "True when the folder is longer than this server reads. The newest messages are here and the oldest are left out."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset",
+          "next_offset",
+          "truncated"
+        ],
+        "title": "MessagePage",
+        "description": "One page of the messages in a folder, newest first."
+      },
+      "MessageSummary": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "The portal's message id. The detail and attachment routes take it."
+          },
+          "read": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Read",
+            "description": "Whether the guardian has read the message, or null when the portal's icon is not one this API knows."
+          },
+          "institutional": {
+            "type": "boolean",
+            "title": "Institutional",
+            "description": "True for a message sent in the school's own name."
+          },
+          "sender": {
+            "type": "string",
+            "title": "Sender",
+            "description": "The sender's name as the portal shows it."
+          },
+          "subject": {
+            "type": "string",
+            "title": "Subject"
+          },
+          "received_on": {
+            "type": "string",
+            "format": "date",
+            "title": "Received On",
+            "description": "The day the portal lists the message under, on the school's calendar."
+          },
+          "expires_on": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires On",
+            "description": "The last day the portal shows the message, when it has one."
+          },
+          "anonymous": {
+            "type": "boolean",
+            "title": "Anonymous",
+            "description": "True when the portal marks the message as anonymous."
+          },
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category",
+            "description": "The category the portal files the message under."
+          },
+          "has_attachments": {
+            "type": "boolean",
+            "title": "Has Attachments",
+            "description": "True when the portal shows a paperclip."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "read",
+          "institutional",
+          "sender",
+          "subject",
+          "received_on",
+          "expires_on",
+          "anonymous",
+          "category",
+          "has_attachments"
+        ],
+        "title": "MessageSummary",
+        "description": "A message as the portal lists it, without its text."
+      },
+      "Problem": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "about:blank",
+            "title": "Type",
+            "description": "Always about:blank. Use `code`, which is stable, to tell problems apart."
+          },
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "description": "The standard name of the HTTP status."
+          },
+          "status": {
+            "type": "integer",
+            "title": "Status",
+            "description": "The HTTP status of the response."
+          },
+          "detail": {
+            "type": "string",
+            "title": "Detail",
+            "description": "What went wrong and what to do about it, for a person."
+          },
+          "code": {
+            "type": "string",
+            "title": "Code",
+            "description": "A stable name for the problem. Branch on this, not on text."
+          },
+          "request_id": {
+            "type": "string",
+            "title": "Request Id",
+            "description": "Quote this when you report a bug."
+          },
+          "cause": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "invalid_credentials",
+                  "refused_login",
+                  "mfa_required",
+                  "action_required_in_portal",
+                  "state_unreadable"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cause",
+            "description": "Why logins are paused, when the account is blocked."
+          },
+          "since": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Since",
+            "description": "When logins were paused, when the account is blocked."
+          },
+          "interstitial": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "CambiarPws",
+                  "TxtLegales",
+                  "OKCuenta",
+                  "MatOnline",
+                  "Classroom"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Interstitial",
+            "description": "The portal page that wants a person, in a browser."
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "not_on_allowlist",
+                  "never_call",
+                  "writes_disabled",
+                  "forms_disabled",
+                  "unread_restore_disabled"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason",
+            "description": "Which of the operator's switches refused the call."
+          },
+          "needed": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "read",
+                  "write",
+                  "admin",
+                  "feed"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Needed",
+            "description": "The scope the key would need, when it lacks one."
+          },
+          "retry_after_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retry After Seconds",
+            "description": "How long to wait before asking again, when rate limited."
+          },
+          "errors": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldProblem"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Errors",
+            "description": "The parts of the request that are not valid."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "type",
+          "title",
+          "status",
+          "detail",
+          "code",
+          "request_id"
+        ],
+        "title": "Problem",
+        "description": "An RFC 9457 problem document. Members past `request_id` appear only when they apply."
+      },
+      "Readiness": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ready",
+              "not_ready"
+            ],
+            "title": "Status"
+          },
+          "checks": {
+            "additionalProperties": {
+              "type": "string",
+              "enum": [
+                "ok",
+                "failed"
+              ]
+            },
+            "type": "object",
+            "title": "Checks",
+            "description": "One entry per thing that was checked."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "status",
+          "checks"
+        ],
+        "title": "Readiness",
+        "description": "Whether the server can serve requests. It never calls the portal."
+      },
+      "StaffList": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/StaffMember"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "StaffList"
+      },
+      "StaffMember": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "The portal's employee id. Meeting requests use it."
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role",
+            "description": "The role the portal prints after the name, if any."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "role"
+        ],
+        "title": "StaffMember",
+        "description": "A teacher or other staff member who can meet with the guardian about a child."
+      },
+      "TrackingCounters": {
+        "properties": {
+          "tasks": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Tasks",
+            "description": "Homework and tasks."
+          },
+          "activities": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Activities",
+            "description": "Activities."
+          },
+          "notes": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Notes",
+            "description": "Teacher notes."
+          },
+          "tests": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Tests",
+            "description": "Tests and quizzes."
+          },
+          "incidents": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Incidents",
+            "description": "Attendance incidents."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "tasks",
+          "activities",
+          "notes",
+          "tests",
+          "incidents"
+        ],
+        "title": "TrackingCounters",
+        "description": "The numbers in the portal's tracking widget for one child."
+      },
+      "Translation": {
+        "properties": {
+          "slot": {
+            "type": "integer",
+            "enum": [
+              2,
+              3
+            ],
+            "title": "Slot",
+            "description": "The portal keeps up to three versions of a message and does not name their languages. The message itself is the first version, so a translation is the second or the third."
+          },
+          "subject": {
+            "type": "string",
+            "title": "Subject"
+          },
+          "body": {
+            "$ref": "#/components/schemas/Body"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "slot",
+          "subject",
+          "body"
+        ],
+        "title": "Translation",
+        "description": "The message in another language, when the sender wrote one."
+      }
+    },
+    "securitySchemes": {
+      "BearerKey": {
+        "type": "http",
+        "description": "An API key, sent as `Authorization: Bearer <key>`. Make one with `alexia-api keys create`.",
+        "scheme": "bearer"
+      },
+      "HeaderKey": {
+        "type": "apiKey",
+        "description": "An API key, sent in the `X-API-Key` header. Use it when a client cannot set `Authorization`.",
+        "in": "header",
+        "name": "X-API-Key"
+      },
+      "FeedKey": {
+        "type": "apiKey",
+        "description": "A key that holds only the `feed` scope, sent as `?key=<key>`. Use it for a calendar app that cannot set a header. Make one with `alexia-api keys create NAME --scope feed`. A key with any other scope is refused here.",
+        "in": "query",
+        "name": "key"
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "meta",
+      "description": "Is the server up, and where is everything."
+    },
+    {
+      "name": "accounts",
+      "description": "The portal accounts this server holds, and their state."
+    },
+    {
+      "name": "children",
+      "description": "The children of an account and their school data."
+    },
+    {
+      "name": "agenda",
+      "description": "The lessons, interviews, and school events of each child and of the guardian, as data and as calendar files that a calendar app can subscribe to."
+    },
+    {
+      "name": "messages",
+      "description": "The message folders of an account and the messages in them."
+    }
+  ]
+}
