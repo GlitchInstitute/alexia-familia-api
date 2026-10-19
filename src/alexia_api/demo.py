@@ -112,14 +112,22 @@ def demo_state() -> Iterator[Path]:
 
     A signal that asks a process to end, such as the one `docker stop` sends or the hangup that
     closing a terminal sends, ends it on the spot and would leave the folder behind. While the
-    folder exists, those signals become an exit instead, so the folder is removed first. The exit
-    status stays the usual 128 plus the signal number.
+    folder exists, a termination request becomes an exit instead, so the folder is removed first.
+    The exit status stays the usual 128 plus the signal number. The server shuts down in order
+    when it gets that request, so a hangup is turned into one. Left alone, it would cut the server
+    off in the middle of its work.
     """
 
     def stop(signum: int, _frame: FrameType | None) -> NoReturn:
         raise SystemExit(128 + signum)
 
-    previous = {ending: signal.signal(ending, stop) for ending in ENDING_SIGNALS}
+    def hang_up(_signum: int, _frame: FrameType | None) -> None:
+        signal.raise_signal(signal.SIGTERM)
+
+    previous = {
+        ending: signal.signal(ending, stop if ending == signal.SIGTERM else hang_up)
+        for ending in ENDING_SIGNALS
+    }
     try:
         with tempfile.TemporaryDirectory(prefix="alexia-demo-") as folder:
             yield Path(folder)

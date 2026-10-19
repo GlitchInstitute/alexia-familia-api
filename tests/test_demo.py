@@ -234,14 +234,25 @@ def test_closing_a_terminal_ends_the_demo_cleanly_too() -> None:
 
 
 @pytest.mark.parametrize("ending", ENDING_SIGNALS, ids=lambda ending: ending.name)
-def test_a_signal_to_end_still_removes_the_folder_and_keeps_the_usual_status(
+def test_a_signal_to_end_still_removes_the_folder_and_ends_as_a_termination_request(
     ending: signal.Signals,
 ) -> None:
     with pytest.raises(SystemExit) as raised, demo_state() as folder:
         signal.raise_signal(ending)
 
-    assert raised.value.code == 128 + ending
+    assert raised.value.code == 128 + signal.SIGTERM
     assert not folder.exists()
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="Windows has no hangup signal")
+def test_a_hangup_goes_to_whatever_handles_termination_at_that_moment() -> None:
+    heard: list[int] = []
+
+    with demo_state():
+        signal.signal(signal.SIGTERM, lambda signum, _frame: heard.append(signum))
+        signal.raise_signal(signal.Signals["SIGHUP"])
+
+    assert heard == [signal.SIGTERM]
 
 
 def test_the_handlers_for_those_signals_are_put_back() -> None:

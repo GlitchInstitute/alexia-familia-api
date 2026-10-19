@@ -120,7 +120,7 @@ def test_the_folder_is_removed_even_when_the_server_cannot_start(
 
 
 @pytest.mark.parametrize("ending", ENDING_SIGNALS, ids=lambda ending: ending.name)
-def test_the_folder_is_removed_when_the_server_is_told_to_end(
+def test_the_folder_is_removed_and_the_exit_says_terminated_when_the_server_is_told_to_end(
     monkeypatch: pytest.MonkeyPatch, ending: signal.Signals
 ) -> None:
     folders: list[Path] = []
@@ -134,7 +134,7 @@ def test_the_folder_is_removed_when_the_server_is_told_to_end(
 
     result = run("demo")
 
-    assert result.exit_code == 128 + ending
+    assert result.exit_code == 128 + signal.SIGTERM
     assert not folders[0].exists()
     assert signal.getsignal(ending) == before
 
