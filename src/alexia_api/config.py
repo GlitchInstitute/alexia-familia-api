@@ -581,8 +581,8 @@ def read_secret(reference: SecretStr, *, setting: str, environ: Mapping[str, str
             raise ConfigError(f"{setting} says file: but names no file")
         case FromFile(path=path):
             try:
-                content = Path(path).read_text(encoding="utf-8")
-            except OSError:
+                content = Path(path).expanduser().read_text(encoding="utf-8")
+            except (OSError, RuntimeError):
                 raise ConfigError(
                     f"{setting} refers to the file {path}, which cannot be read"
                 ) from None

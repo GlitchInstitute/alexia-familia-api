@@ -369,6 +369,32 @@ def test_a_secret_can_name_a_file_and_only_the_line_ending_is_dropped(tmp_path: 
     assert secret.get_secret_value() == "  two words "
 
 
+def test_a_file_path_may_start_with_the_home_folder(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (tmp_path / "password").write_text("from-home\n", encoding="utf-8")
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
+
+    secret = read_secret(
+        SecretStr("file:~/password"), setting="accounts.marta.password", environ={}
+    )
+
+    assert secret.get_secret_value() == "from-home"
+
+
+def test_a_home_folder_that_is_not_known_is_a_config_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def unknown_home(_self: Path) -> Path:
+        raise RuntimeError("Could not determine home directory.")
+
+    monkeypatch.setattr(Path, "expanduser", unknown_home)
+
+    with pytest.raises(ConfigError, match=r"~/password, which cannot be read"):
+        read_secret(SecretStr("file:~/password"), setting="accounts.marta.password", environ={})
+
+
 @pytest.mark.parametrize(
     ("reference", "expected"),
     [
