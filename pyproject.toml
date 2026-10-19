@@ -60,6 +60,7 @@ include = [
   "/README.md",
   "/LICENSE",
   "/CHANGELOG.md",
+  "/alexia-api.example.toml",
   "/pixi.toml",
   "/pixi.lock",
   "/pyproject.toml",

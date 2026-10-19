@@ -46,6 +46,9 @@ openapi-spec-validator = ">=0.9,<1"
 watchfiles = ">=1,<2"
 actionlint = ">=1.7,<2"
 shellcheck = ">=0.11,<1"
+hatchling = ">=1.27,<2"
+python-build = ">=1.2,<2"
+twine = ">=6,<8"
 
 [environments]
 default = { features = ["py313"], solve-group = "main" }
@@ -90,4 +93,6 @@ fmt = { cmd = "ruff check --fix . && ruff format .", description = "Fix style pr
 typecheck = { cmd = "mypy", description = "Type check with mypy in strict mode." }
 privacy = { cmd = "python scripts/check_privacy.py --history", description = "Fail when a file or a commit holds real-looking personal data." }
 docs = { cmd = "python scripts/gen_docs.py", description = "Write the pages that come from the code, such as the endpoint reference and the settings reference." }
-check = { depends-on = ["lint", "typecheck", "privacy", "cov"], description = "Run every check that CI runs." }
+build = { cmd = "python -m build --no-isolation --outdir dist", description = "Build the wheel and the source archive into dist/." }
+dist-check = { cmd = "twine check --strict dist/*", depends-on = ["build"], description = "Build the package, then check that its metadata is valid." }
+check = { depends-on = ["lint", "typecheck", "privacy", "cov", "dist-check"], description = "Run every check that CI runs." }
