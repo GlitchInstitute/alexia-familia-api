@@ -7,12 +7,19 @@ from urllib.parse import urlencode
 
 from selectolax.lexbor import LexborHTMLParser
 
-from alexia_api.domain.errors import PortalError, SchemaDrift, sample_of
+from alexia_api.domain.errors import PortalError
 from alexia_api.domain.ids import InvalidIdError, MessageId, parse_message_id
 from alexia_api.domain.messages import FolderName, MessageSummary
 from alexia_api.domain.time import portal_list_date
 from alexia_api.portal.folders import select_folder
-from alexia_api.portal.grid import GridRow, cell_text, is_empty_cell, parse_grid_json
+from alexia_api.portal.grid import (
+    GridRow,
+    cell_text,
+    is_empty_cell,
+    parse_grid_json,
+    row_drift,
+    text_cells,
+)
 from alexia_api.portal.pages import COMUNICADOS_PAGE, FEED_ACCEPT, PageRequest, get_page
 from alexia_api.portal.session import Tx
 
@@ -66,17 +73,10 @@ def _message_id(text: str) -> MessageId | None:
 
 
 def parse_feed_row(row: GridRow, index: int, page_text: str) -> MessageSummary:
-    def drift(what: str) -> PortalError:
-        return PortalError(
-            SchemaDrift(where=f"feed row {index}: {what}", sample=sample_of(page_text))
-        )
+    def drift(detail: str) -> PortalError:
+        return row_drift("feed", index, detail, page_text)
 
-    if len(row.cell) != FEED_CELLS:
-        raise drift(f"{len(row.cell)} cells instead of {FEED_CELLS}")
-    cells = [cell for cell in row.cell if isinstance(cell, str)]
-    if len(cells) != FEED_CELLS:
-        raise drift("a cell is not text")
-
+    cells = text_cells(row, what="feed", index=index, count=FEED_CELLS, page_text=page_text)
     message_id = _message_id(cells[0])
     if message_id is None or message_id != _message_id(row.id):
         raise drift("the row id and the first cell disagree")

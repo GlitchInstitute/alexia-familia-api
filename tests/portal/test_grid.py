@@ -1,11 +1,26 @@
 """Reading the JSON of a grid page, and the HTML inside its cells."""
 
 import json
+from datetime import UTC, datetime
 
 import pytest
 
 from alexia_api.domain.errors import PortalError, SchemaDrift, SessionExpired
-from alexia_api.portal.grid import GridJson, GridRow, cell_text, is_empty_cell, parse_grid_json
+from alexia_api.domain.ids import StudentId
+from alexia_api.portal.grid import (
+    GridJson,
+    GridRow,
+    GridSpec,
+    cell_text,
+    grid_feed_path,
+    grid_page_path,
+    is_empty_cell,
+    parse_grid_json,
+)
+from alexia_api.sim.world import synthetic_guid
+
+STUDENT = StudentId(synthetic_guid(0x101))
+ONE_CHILD = f"GuidObjeto={STUDENT}&ObjetoTipo=6&master=3&contexto_pagina=1"
 
 ANSWER = {
     "page": 1,
@@ -104,3 +119,30 @@ def test_a_cell_with_anything_else_is_not_empty(html: str) -> None:
 )
 def test_cell_text_is_the_decoded_words_with_single_spaces(html: str, expected: str) -> None:
     assert cell_text(html) == expected
+
+
+def test_the_page_path_opens_the_grid_for_one_child() -> None:
+    spec = GridSpec(name="x", page="/ACWeb/x.aspx", grid_id="g", sort="Fecha", order="desc")
+
+    assert grid_page_path(spec, STUDENT) == f"/ACWeb/x.aspx?{ONE_CHILD}"
+
+
+def test_the_feed_path_is_the_request_the_script_of_the_page_makes() -> None:
+    spec = GridSpec(name="x", page="/ACWeb/x.aspx", grid_id="g", sort="Fecha", order="desc")
+
+    path = grid_feed_path(spec, STUDENT, datetime(2026, 1, 1, tzinfo=UTC))
+
+    assert path == (
+        f"/ACWeb/x.aspx?{ONE_CHILD}&jqGridID=g&_search=false&nd=1767225600000&rows=500&page=1"
+        "&sidx=Fecha&sord=desc"
+    )
+
+
+def test_a_sort_of_two_columns_is_written_as_the_page_writes_it() -> None:
+    spec = GridSpec(
+        name="x", page="/ACWeb/x.aspx", grid_id="g", sort="Unbound_Mes asc, Fecha", order="asc"
+    )
+
+    path = grid_feed_path(spec, STUDENT, datetime(2026, 1, 1, tzinfo=UTC))
+
+    assert path.endswith("&sidx=Unbound_Mes+asc%2C+Fecha&sord=asc")

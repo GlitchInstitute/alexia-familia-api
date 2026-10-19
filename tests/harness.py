@@ -178,6 +178,23 @@ class Harness:
         )
         self.sim.world = replace(world, families=families)
 
+    def revise_child(self, username: str, student_id: str, **changes: Any) -> None:
+        """The school changes what it holds about a child. An open session sees it next."""
+        world = self.sim.world
+        families = tuple(
+            replace(
+                family,
+                children=tuple(
+                    replace(child, **changes) if child.student_id == student_id else child
+                    for child in family.children
+                ),
+            )
+            if family.username == username
+            else family
+            for family in world.families
+        )
+        self.sim.world = replace(world, families=families)
+
     def revise(self, username: str, guid: str, **changes: Any) -> None:
         """The school changes a message it sent. A session that is already open sees it next."""
         world = self.sim.world

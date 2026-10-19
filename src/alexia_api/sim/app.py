@@ -30,7 +30,7 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from alexia_api.clock import Clock, SystemClock
 from alexia_api.domain.errors import Interstitial
-from alexia_api.sim import agenda
+from alexia_api.sim import absences, agenda, grids
 from alexia_api.sim.mail import (
     FOLDER_OF_ID,
     SimFolder,
@@ -127,6 +127,12 @@ class SimOptions:
     """The feed answers with the portal's server error, as it does when it cannot build a week."""
     home_without_guardian: bool = False
     """The home page lists the children and does not list the guardian."""
+    grid_cell_count: int | None = None
+    """Every row of the absences and the meetings is cut or padded to this many cells."""
+    grid_not_json: bool = False
+    """The grid feeds answer with an error page that is not JSON."""
+    grid_bad_date: bool = False
+    """The grid feeds write their dates as year, month, and day and not as the list prints them."""
 
 
 @dataclass(slots=True)
@@ -139,6 +145,8 @@ class SimSession:
     folder: SimFolder = "received"
     message_guid: str | None = None
     open_agenda: tuple[agenda.SimAgendaScope, str] | None = None
+    opened_grids: dict[str, str] = field(default_factory=dict)
+    """For each grid page, the student whose page was opened last."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -359,6 +367,7 @@ class PortalSim:
             Route(REPOSITORY_PATH, self._download, methods=["GET"]),
             Route(agenda.PAGE_PATH, self._agenda_page, methods=["GET"]),
             Route(agenda.FEED_PATH, self._agenda_feed, methods=["GET"]),
+            Route(absences.GRID.path, self._absences, methods=["GET"]),
             Route("/ACWeb/paginas/General/MantenerSesion.aspx", self._keep_alive, methods=["GET"]),
             Route("/ACWeb/paginas/General/LogOff.aspx", self._log_off, methods=["GET"]),
         ]
@@ -783,6 +792,54 @@ class PortalSim:
             object_guid=object_guid,
         )
         return [*lessons, *school]
+
+    async def _grid(
+        self,
+        request: Request,
+        grid: grids.SimGrid,
+        rows_of: Callable[[SimChild], list[dict[str, object]]],
+    ) -> Response:
+        """Serve one per-child grid. The page opens a child and the feed reads the open child."""
+        session = self._live_session(request)
+        family = self._family_of(session) if session is not None else None
+        if session is None or family is None:
+            return RedirectResponse(
+                f"{LOGON_PATH}?ReturnUrl={quote(grid.path, safe='')}", status_code=302
+            )
+        query = dict(request.query_params)
+        listed = {child.student_id: child for child in family.children}
+        if "jqGridID" not in query:
+            opened = grids.page_child(query)
+            if opened not in listed:
+                return _server_error()
+            session.opened_grids[grid.path] = str(opened)
+            return HTMLResponse('<html><body><table id="grid"></table></body></html>')
+
+        ask = grids.feed_ask(grid, query)
+        ajax = request.headers.get("x-requested-with") == "XMLHttpRequest"
+        if ask is None or ask.child not in listed or not ajax:
+            return _server_error()
+        came_from = request.headers.get("referer", "")
+        if self.options.require_referer and not came_from.endswith(grids.page_url(grid, ask.child)):
+            return _server_error()
+        if self.options.grid_not_json:
+            return HTMLResponse("<html><body>Error</body></html>")
+        page_was_opened = session.opened_grids.get(grid.path) == ask.child
+        rows = rows_of(listed[ask.child]) if page_was_opened else []
+        return HTMLResponse(html_safe_json(grids.answer(rows, ask)))
+
+    async def _absences(self, request: Request) -> Response:
+        options = self.options
+
+        def rows_of(child: SimChild) -> list[dict[str, object]]:
+            return absences.rows_of(
+                child.absences,
+                child.full_name,
+                date_as_iso=options.grid_bad_date,
+                cell_count=options.grid_cell_count,
+            )
+
+        return await self._grid(request, absences.GRID, rows_of)
 
     async def _home(self, request: Request) -> Response:
         session = self._live_session(request)

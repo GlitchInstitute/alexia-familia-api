@@ -3,6 +3,7 @@
 from dataclasses import dataclass, field
 from typing import Final
 
+from alexia_api.sim.absences import SimAbsence
 from alexia_api.sim.agenda import SimOccasion, SimSlot
 from alexia_api.sim.mail import SimFile, SimMessage, SimTranslation
 
@@ -49,6 +50,7 @@ class SimChild:
     staff: tuple[SimStaff, ...] = ()
     timetable: tuple[SimSlot, ...] = ()
     events: tuple[SimOccasion, ...] = ()
+    absences: tuple[SimAbsence, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -369,6 +371,62 @@ def _school_calendar() -> tuple[SimOccasion, ...]:
     )
 
 
+def _absences_of_mateo() -> tuple[SimAbsence, ...]:
+    """One open absence, two justified ones that differ in whether the school took them, a delay."""
+    return (
+        SimAbsence(
+            synthetic_guid(0x7501),
+            "2026-10-14",
+            "Falta de asistencia",
+            teacher="Rosa Prueba",
+        ),
+        SimAbsence(
+            synthetic_guid(0x7502),
+            "2026-10-13",
+            "Falta de asistencia",
+            teacher="Rosa Prueba",
+            justified=True,
+            justification="Enfermedad",
+            accepted=True,
+        ),
+        SimAbsence(
+            synthetic_guid(0x7503),
+            "2026-10-12",
+            "Falta de asistencia",
+            teacher="Rosa Prueba",
+            justified=True,
+            justification="Cita médica",
+        ),
+        SimAbsence(
+            synthetic_guid(0x7504),
+            "2026-10-09",
+            "Retraso",
+            hour="09:05",
+            area="Música",
+            teacher="Tomás Demo",
+            note="Llegó con el autobús siguiente.",
+            justifiable=False,
+        ),
+    )
+
+
+def _absences_of_alba() -> tuple[SimAbsence, ...]:
+    return (
+        SimAbsence(
+            synthetic_guid(0x7511),
+            "2026-10-15",
+            "Falta de asistencia",
+            teacher="Rosa Prueba",
+        ),
+        SimAbsence(
+            synthetic_guid(0x7512),
+            "2026-10-08",
+            "Falta de asistencia",
+            teacher="Rosa Prueba",
+        ),
+    )
+
+
 def default_world() -> SimWorld:
     """Two families with two children each, so tests and demos cover several accounts and kids."""
     tutor_a = SimStaff(synthetic_guid(0x601), "Ana Muestra Tutora", "Tutora")
@@ -410,6 +468,7 @@ def default_world() -> SimWorld:
                 staff=(tutor_b, music),
                 timetable=_timetable(2),
                 events=(_occasion(0x7221, "SALIDA A LA GRANJA", (11, 6)),),
+                absences=_absences_of_mateo(),
             ),
         ),
         messages=_mail_of_marta(),
@@ -450,6 +509,7 @@ def default_world() -> SimWorld:
                 staff=(tutor_b, maths),
                 timetable=_timetable(4),
                 events=(_occasion(0x7241, "JORNADA DEPORTIVA", (11, 20)),),
+                absences=_absences_of_alba(),
             ),
         ),
         messages=_mail_of_pablo(),
