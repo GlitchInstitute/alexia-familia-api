@@ -90,16 +90,6 @@ class TtlCache:
         value = await asyncio.shield(task)
         return Cached(cast("T", value), "bypass" if fresh else "miss", 0.0)
 
-    def invalidate(self, prefix: CacheKey) -> int:
-        """Forget every answer whose key starts with `prefix`. Returns how many went."""
-        doomed = [key for key in self._entries if key[: len(prefix)] == prefix]
-        for key in doomed:
-            del self._entries[key]
-        return len(doomed)
-
-    def clear(self) -> None:
-        self._entries.clear()
-
     async def _load[T](self, key: CacheKey, ttl: float, load: Callable[[], Awaitable[T]]) -> T:
         try:
             value = await load()

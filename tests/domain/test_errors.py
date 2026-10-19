@@ -32,7 +32,6 @@ from alexia_api.domain.errors import (
     WsRejected,
     breaker_cause,
     describe,
-    detail_of,
     sample_of,
 )
 
@@ -139,14 +138,6 @@ def test_a_portal_error_carries_its_detail_and_its_description() -> None:
 
     assert error.detail is detail
     assert str(error) == describe(detail)
-    assert detail_of(error) is detail
-
-
-def test_any_other_exception_is_reported_as_an_internal_fault() -> None:
-    detail = detail_of(KeyError("secret"))
-
-    assert detail == UnexpectedReply(where="internal KeyError")
-    assert "secret" not in describe(detail)
 
 
 def test_drift_samples_are_capped() -> None:

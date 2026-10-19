@@ -322,10 +322,3 @@ class PortalError(Exception):
     def __init__(self, detail: PortalErrorDetail) -> None:
         super().__init__(describe(detail))
         self.detail = detail
-
-
-def detail_of(error: BaseException) -> PortalErrorDetail:
-    """Read the typed reason from an error, or call it an internal fault when it has none."""
-    if isinstance(error, PortalError):
-        return error.detail
-    return UnexpectedReply(where=f"internal {type(error).__name__}")

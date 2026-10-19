@@ -201,20 +201,6 @@ async def test_a_failure_nobody_waits_for_is_not_logged_as_lost(
     assert (await cache.get(KEY, 60, Source())).status == "miss"
 
 
-async def test_entries_can_be_dropped_by_prefix(clock: ManualClock) -> None:
-    cache = TtlCache(clock)
-    source = Source()
-    await cache.get(("tracking", "a"), 60, source)
-    await cache.get(("tracking", "b"), 60, source)
-    await cache.get(("children",), 60, source)
-
-    dropped = cache.invalidate(("tracking",))
-
-    assert dropped == 2
-    assert (await cache.get(("children",), 60, source)).status == "hit"
-    assert (await cache.get(("tracking", "a"), 60, source)).status == "miss"
-
-
 async def test_the_least_recently_used_entries_go_first_over_the_limit(
     clock: ManualClock,
 ) -> None:
@@ -228,16 +214,6 @@ async def test_the_least_recently_used_entries_go_first_over_the_limit(
 
     assert (await cache.get(("a",), 60, source)).status == "hit"
     assert (await cache.get(("b",), 60, source)).status == "miss"
-
-
-async def test_clearing_drops_everything(clock: ManualClock) -> None:
-    cache = TtlCache(clock)
-    source = Source()
-    await cache.get(KEY, 60, source)
-
-    cache.clear()
-
-    assert (await cache.get(KEY, 60, source)).status == "miss"
 
 
 @pytest.mark.parametrize(
