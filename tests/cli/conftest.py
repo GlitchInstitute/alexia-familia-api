@@ -8,6 +8,7 @@ from typing import Any
 import pytest
 import uvicorn
 
+from alexia_api.cli import main
 from alexia_api.config import CONFIG_ENV
 from tests.workspace import write_config
 
@@ -31,6 +32,16 @@ def uvicorn_calls(monkeypatch: pytest.MonkeyPatch) -> list[UvicornCall]:
 
     monkeypatch.setattr(uvicorn, "run", record)
     return calls
+
+
+@pytest.fixture(autouse=True)
+def any_port_is_free(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep a test from depending on which ports the machine already uses.
+
+    The commands that start a server check the port first. `test_port.py` brings the real check
+    back.
+    """
+    monkeypatch.setattr(main, "require_free_port", lambda _host, _port: None)
 
 
 @pytest.fixture(autouse=True)

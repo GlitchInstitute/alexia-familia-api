@@ -1,6 +1,7 @@
 """What more than one command needs, so that each command stays short."""
 
 import os
+import socket
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Annotated, NoReturn
@@ -8,6 +9,7 @@ from typing import Annotated, NoReturn
 import typer
 
 from alexia_api.config import ConfigError, Settings, find_config_file, load_settings
+from alexia_api.oserrors import why
 
 ConfigOption = Annotated[
     Path | None,
@@ -48,6 +50,22 @@ def fail(message: str) -> NoReturn:
     """Say what went wrong on standard error and stop with status 1."""
     typer.echo(f"Error: {message}", err=True)
     raise typer.Exit(1)
+
+
+def require_free_port(host: str, port: int) -> None:
+    """Stop with a plain message when nothing can listen on the address.
+
+    uvicorn finds out only after the server started, and by then the demo's banner has already
+    said that the demo is running.
+    """
+    family = socket.AF_INET6 if ":" in host else socket.AF_INET
+    try:
+        with socket.create_server((host, port), family=family):
+            return
+    except OSError as error:
+        # create_server adds the address it tried, which the message already names.
+        reason = why(error).partition(" (while attempting")[0].lower()
+        fail(f"cannot listen on {host} port {port}, {reason}, use --port to choose another port")
 
 
 def load(config: Path | None) -> Settings:

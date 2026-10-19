@@ -14,7 +14,14 @@ from alexia_api.api.app import openapi_document
 from alexia_api.cli.accounts import app as accounts_app
 from alexia_api.cli.keys import app as keys_app
 from alexia_api.cli.report import render, verdict
-from alexia_api.cli.shared import ConfigOption, HostOption, PortOption, fail, make_app
+from alexia_api.cli.shared import (
+    ConfigOption,
+    HostOption,
+    PortOption,
+    fail,
+    make_app,
+    require_free_port,
+)
 from alexia_api.config import CONFIG_ENV, DEFAULT_CONFIG_NAME
 from alexia_api.demo import address, banner, build_demo, demo_state
 from alexia_api.doctor import diagnose, probe_portals
@@ -161,6 +168,7 @@ def serve(
     settings = diagnosis.startable_settings
     if settings is None:
         raise typer.Exit(1)
+    require_free_port(host, port)
     if config is not None:
         os.environ[CONFIG_ENV] = str(config)
     uvicorn.run(
@@ -181,6 +189,7 @@ def demo(host: HostOption = "127.0.0.1", port: PortOption = 8000) -> None:
     configuration file and your ALEXIA_API_ variables are not read. The command shows a key and
     some requests to try.
     """
+    require_free_port(host, port)
     with demo_state() as state_dir:
         demonstration = build_demo(state_dir)
         base = address(host, port)
