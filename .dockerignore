@@ -1,0 +1,31 @@
+# What never goes into an image build. The Dockerfile copies the few files it needs by name,
+# and this list keeps everything else, above all secrets and local data, out of the context.
+.git
+.github
+.pixi
+.venv
+__pycache__
+*.py[cod]
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.hypothesis
+.coverage
+.coverage.*
+htmlcov
+build
+dist
+
+# Secrets, keys, and what a running server writes.
+.env
+.env.*
+alexia-api.toml
+state
+*.pem
+*.key
+.denylist.sha256
+
+# Local captures and notes that can hold real family data.
+.recon
+.audit
+captures

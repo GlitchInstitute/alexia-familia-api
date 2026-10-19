@@ -1,0 +1,43 @@
+# Runs alexia-familia-api with Docker Compose. It needs Compose 2.24 or newer.
+# Read docs/deployment.md before the server can be reached from any other machine.
+#
+#   1. Copy alexia-api.example.toml to alexia-api.toml and fill in your school.
+#   2. Copy .env.example to .env and put your portal login in it.
+#   3. docker compose up -d --build
+#   4. docker compose exec alexia-api alexia-api keys create phone
+#
+# The configuration file is mounted read-only. The keys and the other files the server writes
+# live in the data volume, so they survive a new container.
+name: alexia-familia-api
+
+services:
+  alexia-api:
+    build: .
+    image: alexia-familia-api:local
+    restart: unless-stopped
+    # Only this machine can reach the server. Put a proxy that adds TLS in front of it to share it.
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - data:/data
+      # The long form stops Compose from making an empty folder when the file is missing.
+      - type: bind
+        source: ./alexia-api.toml
+        target: /data/alexia-api.toml
+        read_only: true
+        bind:
+          create_host_path: false
+    # The portal login. The names must be the ones alexia-api.toml writes after env:.
+    env_file:
+      - path: .env
+        required: false
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  data:
