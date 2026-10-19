@@ -24,3 +24,8 @@ def validator_for(schema: dict[str, Any]) -> OAS31Validator:
 def validate_against_model(body: object, schema: dict[str, Any]) -> None:
     """Raise when the body does not fit the schema."""
     validator_for(schema).validate(body)
+
+
+def complaints_about(body: object, schema: dict[str, Any]) -> list[str]:
+    """Everything that is wrong with the body for the schema, or an empty list when it fits."""
+    return [error.message for error in validator_for(schema).iter_errors(body)]

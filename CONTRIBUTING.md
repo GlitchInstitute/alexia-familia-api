@@ -98,6 +98,7 @@ Docs are part of the change. A reader should be able to follow a page without he
 - Do not use an em dash. Do not use a colon to join two parts of a sentence. A colon before a list is fine.
 - Show a command with its output when the output matters.
 - Use made-up names, made-up ids, and `portal.example.test` for the portal.
+- Put an answer of the API in a `json` block. A test checks each such block against the answers in the OpenAPI document, so a field that was renamed or left out fails the build. Use `jsonl` or `text` for anything else, such as a log line.
 
 The endpoint reference and the OpenAPI snapshot in `docs/` come from the code. A test fails when they differ, and the message names the command that rewrites them.
 

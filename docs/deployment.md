@@ -354,7 +354,7 @@ The server writes one line for each request to standard error, where Docker, sys
 
 Set `log_format = "json"` for one object per line, which log tools read without help.
 
-```json
+```jsonl
 {"time": "2026-10-19T03:31:29Z", "level": "INFO", "logger": "alexia_api.access", "message": "GET /v1/accounts/{account}/children 502 25ms", "request_id": "be0b8ed62db24f4287451a616a42eb59", "account": "marta", "key": "phone", "code": "transport"}
 ```
 
