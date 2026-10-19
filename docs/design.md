@@ -19,10 +19,10 @@ This page describes the whole design, and the code has not reached all of it. Ea
 | Part | State |
 | --- | --- |
 | The portal client, with login, session, breaker, allowlist, and politeness rules | Built |
-| Readers for the children, the tracking counters, the staff, the folders, the messages, the files, the agenda, the absences, the meetings, and the free hours of the staff | Built |
+| Readers for the children, the tracking counters, the staff, the folders, the messages, the files, the agenda, the absences, the meetings, the free hours of the staff, and the forms | Built |
 | The REST API for those readers, with keys, scopes, rate limits, problem documents, caching, and calendar files | Built |
 | The command line, the demo with a simulated school, the doctor, the Docker image, and CI | Built |
-| Readers for forms and contacts | Not built |
+| Reader for contacts | Not built |
 | Writes and the outbox | Not built. Every call in the allowlist reads, so the write settings change nothing yet |
 | Putting a message back to unread | Not built |
 
@@ -95,7 +95,7 @@ Resources nest the way the data does.
 
 - `/v1/accounts/{account}` is the account.
 - `/v1/accounts/{account}/children/{child}/...` holds what belongs to one child. Tracking, staff, absences, meetings, the free hours of the staff, and the agenda are built.
-- `/v1/accounts/{account}/messages` and `/folders` belong to the guardian, and so will `/contacts` and `/forms`. The portal keeps one inbox per login, not one per child.
+- `/v1/accounts/{account}/messages`, `/folders`, and `/forms` belong to the guardian, and so will `/contacts`. The portal keeps one inbox per login, not one per child.
 
 A `{child}` segment accepts the student id or a slug. The server derives the slug from the child's first name in lower case ASCII, adds `-2` on a collision, and lets the operator pin slugs in the configuration so URLs stay stable. A message names the children it concerns in free text. The server returns that text and the ids of the children whose names it contains.
 
@@ -230,6 +230,9 @@ The simulator and the parsers come from one author, so passing tests prove consi
 | Free hours of the staff | Read only for a person on the staff list of the same child, and stored apart from the other lists with a bound | Read for any id that a caller sends, and store with the other lists | The portal's own page offers that list, and the server holds the same line without a portal call. A caller chooses the month and the day, so those keys come from outside, and a bounded store of their own keeps them from pushing the lists out. |
 | How far a day may lie from today | One rule of 1100 days for the agenda and for the free hours | A rule for each route, or no rule | One rule is easier to learn and to test, and a mistyped year does not become a request to the portal. |
 | The state of a meeting | A closed list of states with `unknown`, and the portal's own word beside it | Fail on a word that is not known, or show only the portal's word | Only one word has been seen on a real list. A new word must not break the whole list, and a client can still read it. |
+| How the forms are read | Switch the portal's one list to the forms, read it, switch it back, all under the account lock, and end the session when a read fails halfway | Leave the portal on the forms, or read the forms without a way back | The portal remembers one list for the whole session and starts on the messages after a login. A read that fails halfway cannot tell which list the portal shows, and a new login puts it right. A read of the messages must never meet the forms. |
+| What counts as a list of forms | The reader asks the portal's page whether it lists forms, and refuses a page that does not say so | Trust the call that selects the forms | A portal that ignored the address would answer with the messages, and the server would serve them under the name of forms. The page states which list it holds, so the reader checks it. |
+| The state of a form | Not shown | Guess answered or pending from the expiry or from the read icon | The message grid has no such flag, and nobody has seen a row of a form. A guess would tell a guardian that a form is done when it is not. |
 | Error format | RFC 9457 problem documents | Custom JSON | Clients and tools already understand it. |
 | Calendar times | UTC moments and dates, with no zone rules | A `VTIMEZONE` with `TZID` on each time, floating local times | One independent reader cut the generated zone rules short and showed summer lessons an hour off. A UTC moment reads the same in every app. |
 | Session persistence | None | Sealed cookie files | A new login is cheap. The breaker file stops crash loops without storing a session. |

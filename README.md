@@ -101,7 +101,7 @@ The portal lists all of a parent's children under one login, so one account in t
 
 - `/v1/accounts/{account}/children` lists the children of an account.
 - `/v1/accounts/{account}/children/{child}/...` holds what belongs to one child, such as tracking, staff, absences, meetings, and agenda. `{child}` is the child's id or a short name such as `lucia`.
-- `/v1/accounts/{account}/messages` and `/folders` belong to the guardian, because the portal keeps one inbox for each login.
+- `/v1/accounts/{account}/messages`, `/folders`, and `/forms` belong to the guardian, because the portal keeps one inbox for each login.
 
 A second parent with a separate login is a second account on the same server. A key can be limited to some accounts, so a key for one parent cannot read the other's. [Children and accounts](docs/children-and-accounts.md) covers several children, two parents, and two schools.
 
@@ -116,8 +116,9 @@ A second parent with a separate login is a second account on the same server. A 
 | API keys, scopes, calendar feed keys, rate limits | Ready |
 | Docker image and Compose file | Ready |
 | Meetings of each child and the free hours of the staff | Ready, but only one state word has been seen on a real list |
+| Forms that the school asks a guardian to answer, to read | Ready, but no real list has been read yet |
 | Contacts | Planned |
-| Forms | Planned |
+| Answering forms | Planned, and off until you switch it on |
 | Sending messages and meeting requests | Planned, and off until you switch it on |
 
 The [design page](docs/design.md) explains what each planned item will do and why it is built the way it is.

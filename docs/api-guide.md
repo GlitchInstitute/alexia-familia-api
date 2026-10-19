@@ -21,6 +21,7 @@ A login at the portal holds all the children of a family, so an address names th
 | Children | `/v1/accounts/{account}/children/{child}/...` | What belongs to one child, such as the tracking counters, the staff, the absences, the meetings, and the agenda. |
 | Guardian | `/v1/accounts/{account}/guardian/agenda` | The interviews and school events of the parent or guardian. |
 | Messages | `/v1/accounts/{account}/messages` and `/folders` | The inbox. It belongs to the login and not to a child, so it sits under the account. |
+| Forms | `/v1/accounts/{account}/forms` | The authorizations and surveys that the school asks a guardian to answer. They belong to the login too. |
 | Calendars | `.../agenda.ics` | Calendar files for one child, for the guardian, or for the whole family. |
 
 A few rules hold everywhere.
@@ -37,6 +38,7 @@ A few rules hold everywhere.
 | Account | `marta` | The name in the settings, or `GET /v1/accounts`. It uses lower case letters, digits, and hyphens. |
 | Child | The student id `5afe0000-0000-4000-8000-000000000101`, or the slug `lucia` | `GET /v1/accounts/{account}/children`. A route takes either one, and letter case does not matter. |
 | Message | `5afe0000-0000-4000-8000-000000001002` | The `id` in the message list. Letter case does not matter. |
+| Form | `5afe0000-0000-4000-8000-000000001401` | The `id` in the list of forms. Letter case does not matter. A message id is not a form id. |
 | File of a message | A long text such as `NWFmZTAw...` | The `attachments` of the message. Use it as it is. It is a token that the server makes, and it is not the portal's own id. |
 
 An agenda entry has an id too. It joins the portal's id for the entry and the day with a `|`, as in `<id>|2026-10-19`. The portal gives a lesson the same id every week, so the day is what makes each occurrence different. The id stays the same from one read to the next.
@@ -49,7 +51,7 @@ Treat every id as text and compare it as text. The [configuration guide](configu
 
 - A date is written `YYYY-MM-DD`, and it names a day at the school. The school's time zone is the `timezone` setting, which is `Europe/Madrid` unless you change it.
 - A moment is a date and time with an offset, such as `2026-10-19T09:00:00+02:00`. The offset follows the school's clock changes, so the same lesson reads `+01:00` in winter. A program that converts a moment to UTC gets the same instant.
-- A message has a `received_on` date and, when you read it in full, a `sent_at` moment.
+- A message or a form has a `received_on` date and, when you read it in full, a `sent_at` moment.
 - An agenda entry that lasts all day has `all_day` set to true. Its days run from `starts_at` to `ends_at`.
 
 The agenda routes take `from` and `to`. Both days count, so `from=2026-10-19&to=2026-10-19` asks for one day.
@@ -71,7 +73,7 @@ The `kind` parameter keeps some kinds of entries. Repeat it to keep several, as 
 
 ## Lists and pages
 
-Most lists come whole, wrapped in an object with an `items` list. That holds for the accounts, the children, the staff, the absences, the meetings, and the folders. The agenda also says which days it covers, with `from` and `to`. The free hours of the staff say which month or day they cover, with `month` or `day`.
+Most lists come whole, wrapped in an object with an `items` list. That holds for the accounts, the children, the staff, the absences, the meetings, the forms, and the folders. The agenda also says which days it covers, with `from` and `to`. The free hours of the staff say which month or day they cover, with `month` or `day`.
 
 Only the list of messages comes a page at a time, because an inbox can be long.
 
@@ -246,6 +248,75 @@ An empty `items` list means that nothing is free. A month or a day that lies mor
 The answer belongs to the person and not to the child, so two children who share a teacher share one stored answer. The server keeps it for a minute by default, because other guardians book hours too, and `fresh=true` reads it again. Which days a school offers is the school's rule and not this server's. The demo offers hours from tomorrow on, and a real school can differ.
 
 This server only reads the hours. A guardian asks for a meeting in the portal.
+
+## Forms
+
+Some mail from the school asks the guardian to answer, such as an authorization for a trip or a survey. The portal lists these forms apart from the messages, and so does this server. `GET /v1/accounts/{account}/forms` lists them, newest first. They belong to the login and not to a child, so one list holds the forms for every child of the account.
+
+```json
+{
+  "items": [
+    {
+      "id": "5afe0000-0000-4000-8000-000000001401",
+      "subject": "Autorización para la salida al zoo",
+      "sender": "Secretaría",
+      "received_on": "2026-10-16",
+      "expires_on": "2026-10-30",
+      "category": "Autorizaciones"
+    },
+    {
+      "id": "5afe0000-0000-4000-8000-000000001402",
+      "subject": "Encuesta del comedor escolar",
+      "sender": "Dirección",
+      "received_on": "2026-10-01",
+      "expires_on": "2026-10-20",
+      "category": "Encuestas"
+    }
+  ],
+  "truncated": false
+}
+```
+
+| Field | What it means |
+| --- | --- |
+| `received_on` | The day the portal lists the form under. |
+| `expires_on` | The last day the portal shows the form, or `null` when it has none. |
+| `category` | The portal's own word for the kind of form, or `null`. The demo uses `Autorizaciones` and `Encuestas`, and a real portal may use other words. |
+| `truncated` | True when the portal holds more forms than the server reads, so the oldest are missing. |
+
+`GET /v1/accounts/{account}/forms/{form}` gives one form. It has the fields of its row, then the moment the school sent it, its words, the addresses in the words, and the names of the children it is about.
+
+```bash
+curl -H "Authorization: Bearer $KEY" \
+  "http://127.0.0.1:8000/v1/accounts/marta/forms/5afe0000-0000-4000-8000-000000001401"
+```
+
+```json
+{
+  "id": "5afe0000-0000-4000-8000-000000001401",
+  "subject": "Autorización para la salida al zoo",
+  "sender": "Secretaría",
+  "received_on": "2026-10-16",
+  "expires_on": "2026-10-30",
+  "category": "Autorizaciones",
+  "sent_at": "2026-10-16T10:00:00+02:00",
+  "body": {
+    "html": "<p>La clase de Lucía irá al zoo el 5 de noviembre.</p><p>Necesitamos su autorización antes del 30 de octubre.</p>",
+    "text": "La clase de Lucía irá al zoo el 5 de noviembre.\n\nNecesitamos su autorización antes del 30 de octubre.",
+    "simplified": false
+  },
+  "links": [],
+  "child_names": "Lucía"
+}
+```
+
+`body.html` is safe to show, and `body.text` holds the same words as plain text. `child_names` is the portal's own text, because the portal names the children and gives no ids. A form is found only in the list. An id that is not in it gets a `404` with the code `form_not_found`, and the server does not ask the portal. Read the list with `fresh=true` when a form arrived a moment ago.
+
+The server only reads. It does not read the questions of a form, and it cannot tell whether a form was answered, so a form that a guardian answered can still be in the list. A guardian answers in the portal. The portal opens a form like a message, so opening one may mark it as read there, and the server cannot tell whether it does. The files that come with a form are not served.
+
+The portal shows the forms and the messages in the same place and remembers which of the two it lists. The server switches the portal to the forms, reads the list, and switches it back. It holds the lock of the account for the whole read, so a read of the messages never meets the forms. A read that fails halfway ends the session, so the next request logs in again. That costs about a second and a half, so a failed read of the forms is not free. A wrong guess about the portal could show messages as forms, so the server also checks that the page says that it lists forms. A page that does not say so gets the problem `unexpected_reply`.
+
+No real list of forms has been read yet. The portal's own name for the list is authorizations, and nobody has checked whether surveys sit in it. The [protocol notes](protocol.md#forms) say which parts an earlier client saw a real portal do, and which parts are read from the portal's script or assumed.
 
 ## How fresh an answer is
 

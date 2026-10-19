@@ -15,9 +15,9 @@ Some data belongs to a child and some belongs to the login.
 
 | Belongs to a child | Belongs to the account |
 | --- | --- |
-| The tracking counters, the staff a guardian can meet and their free hours, the absences, the meetings, the agenda, and the child's calendar. | The messages, the message folders, the guardian's own agenda, the connection to the portal, and the family calendar. |
+| The tracking counters, the staff a guardian can meet and their free hours, the absences, the meetings, the agenda, and the child's calendar. | The messages, the message folders, the forms, the guardian's own agenda, the connection to the portal, and the family calendar. |
 
-A message belongs to the guardian, so the server does not sort messages by child.
+A message or a form belongs to the guardian, so the server does not sort them by child. A form lists the children it is about as the portal's own text.
 
 ## One parent with several children
 

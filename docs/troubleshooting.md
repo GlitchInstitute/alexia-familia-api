@@ -121,6 +121,15 @@ The list comes a page at a time. Follow `next_offset` until it is null. `truncat
 
 The portal may mark a message as read when it opens, and this server cannot tell whether it does. Nobody has run the experiment that would show it, as the [protocol notes](protocol.md#what-nobody-has-seen) explain. The `read` field reports what the portal said when the list was loaded. Note it before you open a message if it matters to you.
 
+### The list of forms is empty, or it fails
+
+- An empty list is a real answer when the school sent no form. The portal that an earlier client saw had none, so nobody has seen a row of a form yet.
+- `unexpected_reply` with the detail `forms page does not say that it lists forms` means that the portal's page did not say that it lists forms. The server then reads nothing and sends no more calls, so no message appears as a form. Open an issue with the `request_id` and the detail.
+- `portal_changed` on the list means that a row has a shape that the reader does not know. Follow the steps under [`portal_changed` or `unexpected_reply`](#portal_changed-or-unexpected_reply) below.
+- A read of the forms that fails ends the session, so the next request logs in again. That one extra login is the whole cost.
+- `form_not_found` means that the id is not in the list. Use an id from the list, and read the list with `fresh=true` when a form arrived lately.
+- The server cannot tell whether a form was answered. Check that in the portal.
+
 ### A time is off by one or two hours
 
 A time such as `2026-03-30T09:00:00+02:00` is nine o'clock at the school. A program that converts it to UTC shows `07:00`, which names the same moment. Show the time in the school's zone, or keep the offset. Check `timezone` if the offset is wrong for your school.

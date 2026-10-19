@@ -41,6 +41,8 @@ Every path starts at `/ACWeb/` on the school's host. The `key` in the login addr
 | Agenda feed | `/ACWeb/controladores/ControladorAgenda.ashx` | Seen |
 | Message list | `/ACWeb/paginas/Comunicacion/Comunicados.aspx` | Seen |
 | One message | `/ACWeb/paginas/Comunicacion/Comunicado.aspx` | Seen |
+| Form list | `/ACWeb/paginas/Comunicacion/Comunicados.aspx?autorizaciones=1` | Seen, with an empty list |
+| One form | The page of one message, `Comunicado.aspx` | Guessed |
 | File download | `/ACWeb/Controladores/ControladorRepositorio.ashx` | Seen |
 | Absences page and its grid feed | `/ACWeb/paginas/incidencias/Justificar.aspx` | Seen |
 | Meetings page and its grid feed | `/ACWeb/paginas/Grids/Entrevistas.aspx` | Seen |
@@ -65,7 +67,7 @@ Request models refuse names they do not know, so a typo cannot reach the portal.
 | `WSReuniones.GetFechasDisponibles` | The days of one month on which a person has a free hour | `guidEmpleado`, `mes`, `anyo` | `{horarios: ["YYYY,M,D", ...]}` with one text for each free hour, or `{}` when nothing is free | Seen |
 | `WSReuniones.GetHorasByFecha` | The free hours of one person on one day | `guidEmpleado`, `fecha` as ISO text | `{horas: ["HH:MM-HH:MM", ...]}`, or `{}` when nothing is free | Seen |
 | `WSComunicados.GetArbolCarpetasJSON` | The folder tree | `IsAutorizacion` | `nodos`, which is JSON inside the JSON | Seen |
-| `WSComunicados.CarpetaSeleccionada` | Makes the portal list one folder | `idCarpeta`, `IsAutorizacion`, `TextoBusqueda` | An object that the client ignores | Seen |
+| `WSComunicados.CarpetaSeleccionada` | Makes the portal list one folder, or the forms when `IsAutorizacion` is `1` | `idCarpeta`, `IsAutorizacion`, `TextoBusqueda` | An object that the client ignores | Seen, and with `1` only on an empty list |
 | `WSComunicados.GetDatosPaginaComunicado` | The data of the message that is open | None | The message fields | Seen |
 
 ### When a call fails
@@ -127,6 +129,7 @@ The portal keeps state for each session on its server.
 | State | Set by | Label |
 | --- | --- | --- |
 | The folder that the message list shows | `CarpetaSeleccionada` | Seen |
+| Whether the message list shows the messages or the forms | Loading `Comunicados.aspx` with or without `autorizaciones=1`, and `CarpetaSeleccionada` | Seen for the way to the forms, Read for the way back |
 | The message that is open | Loading `Comunicado.aspx` | Seen |
 | The person whose agenda is open | Loading `PaginaAgenda.aspx` | Seen |
 | The active child | A script call this client never makes | Read |
@@ -245,6 +248,33 @@ The portal serves the files of the message that the session has open. The client
 
 The client assumes that a failed download comes back as a web page with status 200. It refuses a page, a size that differs from the size the message lists, and anything over the limit. The check costs nothing when the assumption is wrong. Guessed.
 
+## Forms
+
+The portal lists the authorizations that a school asks a guardian to answer in the grid of the messages, and the page decides which of the two the grid lists. The earlier client opened the page for the authorizations on a real portal and found the list empty, so no row of a form has been seen. The portal's own name for the list is authorizations, and nobody has checked whether surveys sit in it.
+
+| Fact | Label |
+| --- | --- |
+| `Comunicados.aspx?autorizaciones=1` sets the page's hidden field `hidIsAutorizacion` to 1, and the grid feed after it lists the authorizations. | Seen, with an empty list |
+| `CarpetaSeleccionada` with `IsAutorizacion` set to `"1"` works, and `GetArbolCarpetasJSON` answers the same tree for `"0"` and `"1"`. | Seen, with an empty list |
+| A row of that grid has the 11 cells of a message row. | Guessed |
+| The plain page and `CarpetaSeleccionada` with `"0"` put the list back on the messages. | Read |
+| The portal keeps the choice between the two lists for the rest of the session. | Read |
+| A form opens like a message, with `Comunicado.aspx` and `GetDatosPaginaComunicado`. | Guessed |
+
+A read of the forms takes five requests, in this order, and the lock of the account is held from the first to the last.
+
+1. Load `Comunicados.aspx?autorizaciones=1`. The reader checks that the page says it lists forms, which means that an input whose id or name ends in `hidIsAutorizacion` has the value `1`. A page that says anything else, or says nothing, is `unexpected_reply`, and the reader sends nothing more. This keeps a portal that ignored the address from giving the messages under the name of forms.
+2. Call `CarpetaSeleccionada` for the received folder with `IsAutorizacion` set to `"1"`.
+3. Read the grid feed as for a folder of messages, page after page.
+4. Load `Comunicados.aspx` with no query. The reader refuses a page that says it still lists forms. The plain page is not known to carry the input, so a page that says nothing passes.
+5. Call `CarpetaSeleccionada` for the received folder with `IsAutorizacion` set to `"0"`.
+
+A read that fails or is cancelled between the first request and the last cannot tell which list the session shows. The reader then clears the cookies, so the next request counts as an expired session, and the gateway logs in again. The list starts on the messages after a login. The price is one more login after a failed read, and a read that works keeps its session.
+
+The reader gives the rows to the parser of the message grid, so a row with another count of cells is `portal_changed` and the part names the row. A form keeps the id, the sender, the subject, the date, the expiry, and the category of its row. The read icon and the other cells are ignored.
+
+One form opens as one message does. The reader loads `Comunicado.aspx` with the id of the form, calls `GetDatosPaginaComunicado`, and checks the page against the list row. It reads the time of sending, the text, and the names of the children. It reads no question, no answer, and no file. The page opens with the list on the messages, so reading a form does not switch the list. If the real portal opens a form on another page, the check against the row fails with `unexpected_reply`, and the reader never serves the words of another message under the id of a form.
+
 ## Lists of one child
 
 The absences of a child come from a grid page, and the meetings come from another one. Both work in two steps, in the order the portal's own page makes them.
@@ -350,6 +380,7 @@ Which days the portal offers is the school's rule. The simulator offers hours on
 - A counter above zero in the tracking widget and in the agenda.
 - A row of the absences grid. The cell formats come from the page's script, and the recording had no rows.
 - A meeting in any state but `Aceptada`. The other state words are guesses, and a word that the reader does not know shows as `unknown`.
+- A form in the list. The list was empty where the earlier client ran, so the cells of a form row, the words in its category, the page that opens a form, and whether surveys sit in the same list are all unseen. The check that the page says it lists forms rests on the one field that the earlier client saw change.
 - What the portal answers for the free hours of a month that is over or of today. The simulator's rule of hours from tomorrow on is its own.
 - What the school-year rollover looks like, both in the screens it may add to the login and in the agenda.
 - What a real wrong password does to a real account. The design assumes that it can lock it.
@@ -359,7 +390,7 @@ Which days the portal offers is the school's rule. The simulator offers hours on
 These calls are not in the allowlist, so the server cannot send them. The notes are for whoever builds the next reader.
 
 - Justifying an absence. The page's justify action moves the whole window to a route that belongs to the session, so a plain call cannot follow it. The page also has a popup that announces an absence, and that is a write. Read.
-- Forms and authorizations. The list is the message grid with `autorizaciones=1` on the page. The recording had no forms, so the shape of one is not known.
+- Answering a form. The portal's scripts publish no method for the authorizations and the surveys, and the earlier client had no form to answer, so the questions, the answers, and the page of a survey were never seen. The server reads the list and the words of a form and nothing more.
 - Writes. Meeting requests, replies, new messages, and absence announcements all have calls in the portal's scripts. None has run on a real portal. Read.
 
 ## When the portal changes
