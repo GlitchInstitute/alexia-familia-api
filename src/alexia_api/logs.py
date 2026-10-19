@@ -12,7 +12,7 @@ from typing import Any, Final
 
 from alexia_api.config import LogFormat, LogLevel
 
-LOG_FIELDS: Final = ("request_id", "account", "key")
+LOG_FIELDS: Final = ("request_id", "account", "key", "code")
 TIME_FORMAT: Final = "%Y-%m-%dT%H:%M:%SZ"
 
 

@@ -115,6 +115,87 @@ async def test_an_unmatched_address_is_logged_without_its_text(
     assert "private" not in what_the_server_logged(record)
 
 
+@pytest.mark.parametrize(
+    ("typed", "marker"),
+    [
+        ("zoe", "zoe"),
+        ("x%0A2026-10-19T03:13:40Z%20INFO%20alexia_api.server%20forged", "forged"),
+        ("a" * 500, "a" * 50),
+    ],
+)
+async def test_an_account_name_that_nobody_configured_is_never_logged(
+    api: Api, caplog: pytest.LogCaptureFixture, typed: str, marker: str
+) -> None:
+    with caplog.at_level(logging.INFO, logger="alexia_api.access"):
+        response = await api.get(f"/v1/accounts/{typed}")
+    [record] = access_records(caplog)
+    assert response.status_code == 404
+    assert record.__dict__["account"] is None
+    assert marker not in what_the_server_logged(record)
+
+
+async def test_a_caller_without_a_valid_key_cannot_put_an_account_name_in_the_log(
+    api: Api, caplog: pytest.LogCaptureFixture
+) -> None:
+    with caplog.at_level(logging.INFO, logger="alexia_api.access"):
+        await api.client.get("/v1/accounts/marta/children")
+    [record] = access_records(caplog)
+    assert " 401 " in record.getMessage()
+    assert record.__dict__["account"] is None
+
+
+@pytest.mark.parametrize(
+    ("path", "code"),
+    [
+        ("/v1/accounts/zoe", "account_not_found"),
+        ("/nowhere", "not_found"),
+        ("/v1/accounts/marta/children/lucia/tracking?fresh=maybe", "validation_error"),
+    ],
+)
+async def test_a_failed_request_is_logged_with_the_code_of_its_problem(
+    api: Api, caplog: pytest.LogCaptureFixture, path: str, code: str
+) -> None:
+    with caplog.at_level(logging.INFO, logger="alexia_api.access"):
+        response = await api.get(path)
+    [record] = access_records(caplog)
+    assert response.json()["code"] == code
+    assert record.__dict__["code"] == code
+
+
+async def test_a_request_that_worked_is_logged_without_a_code(
+    api: Api, caplog: pytest.LogCaptureFixture
+) -> None:
+    with caplog.at_level(logging.INFO, logger="alexia_api.access"):
+        await api.get("/v1/accounts")
+    [record] = access_records(caplog)
+    assert " 200 " in record.getMessage()
+    assert record.__dict__["code"] is None
+
+
+@pytest.mark.parametrize(
+    ("headers", "code"),
+    [({}, "missing_api_key"), ({"Authorization": "Bearer afk_wrong"}, "invalid_api_key")],
+)
+async def test_a_refused_key_is_logged_with_the_code_that_says_why(
+    api: Api, caplog: pytest.LogCaptureFixture, headers: dict[str, str], code: str
+) -> None:
+    with caplog.at_level(logging.INFO, logger="alexia_api.access"):
+        await api.client.get("/v1/accounts", headers=headers)
+    [record] = access_records(caplog)
+    assert record.__dict__["code"] == code
+
+
+async def test_a_refused_host_is_logged_with_its_code_and_not_its_name(
+    make_api: MakeApi, caplog: pytest.LogCaptureFixture
+) -> None:
+    api = await make_api(allowed_hosts=["api.test"])
+    with caplog.at_level(logging.INFO, logger="alexia_api.access"):
+        await api.client.get("/", headers={"Host": "elsewhere.test"})
+    [record] = access_records(caplog)
+    assert record.__dict__["code"] == "invalid_host"
+    assert "elsewhere" not in what_the_server_logged(record)
+
+
 @pytest.mark.parametrize("key", [None, "afk_wrong"])
 async def test_a_refused_key_is_logged_without_a_key_name(
     api: Api, caplog: pytest.LogCaptureFixture, key: str | None
@@ -138,6 +219,7 @@ async def test_a_rate_limited_request_is_logged_with_the_name_of_its_key(
     [record] = access_records(caplog)
     assert " 429 " in record.getMessage()
     assert record.__dict__["key"] == "reader"
+    assert record.__dict__["code"] == "rate_limited"
 
 
 async def test_a_server_error_is_logged_with_its_status(
@@ -151,6 +233,7 @@ async def test_a_server_error_is_logged_with_its_status(
         await api.get("/v1/accounts/marta/children")
     [record] = access_records(caplog)
     assert " 500 " in record.getMessage()
+    assert record.__dict__["code"] == "internal_error"
 
 
 @pytest.mark.parametrize(

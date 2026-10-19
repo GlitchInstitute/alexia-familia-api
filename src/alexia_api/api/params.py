@@ -8,7 +8,7 @@ from collections.abc import Awaitable, Callable
 from functools import cache
 from typing import Annotated, Any, Final
 
-from fastapi import Depends, Path, Query, Response
+from fastapi import Depends, Path, Query, Request, Response
 
 from alexia_api.api.auth import require, require_feed
 from alexia_api.api.deps import ServicesDep
@@ -59,10 +59,13 @@ def _account_after(who: Callable[..., Principal]) -> AccountSource:
         ],
         principal: Annotated[Principal, Depends(who)],
         services: ServicesDep,
+        request: Request,
     ) -> AccountRuntime:
         if not principal.sees(account):
             raise NotFoundError("account", account)
-        return services.registry.get(account)
+        runtime = services.registry.get(account)
+        request.state.account_name = runtime.account
+        return runtime
 
     return resolve
 

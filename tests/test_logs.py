@@ -72,11 +72,11 @@ def far_from_utc(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
 
 
 def test_the_plain_line_has_the_time_the_level_the_logger_the_message_and_the_fields() -> None:
-    record = make_record(request_id="abc12345", account="marta", key="phone")
+    record = make_record(request_id="abc12345", account="marta", key="phone", code="transport")
 
     assert PlainFormatter().format(record) == (
         "2026-10-18T20:15:03Z INFO    alexia_api.access GET /v1/accounts 200 12ms "
-        "request_id=abc12345 account=marta key=phone"
+        "request_id=abc12345 account=marta key=phone code=transport"
     )
 
 
@@ -109,7 +109,7 @@ def test_the_time_is_in_utc_wherever_the_server_runs(formatter: logging.Formatte
 
 
 def test_the_json_line_is_one_object_with_the_same_fields() -> None:
-    record = make_record(request_id="abc12345", account="marta", key="phone")
+    record = make_record(request_id="abc12345", account="marta", key="phone", code="transport")
 
     assert json.loads(JsonFormatter().format(record)) == {
         "time": "2026-10-18T20:15:03Z",
@@ -119,6 +119,7 @@ def test_the_json_line_is_one_object_with_the_same_fields() -> None:
         "request_id": "abc12345",
         "account": "marta",
         "key": "phone",
+        "code": "transport",
     }
 
 
@@ -157,7 +158,7 @@ def test_a_field_the_server_did_not_choose_never_reaches_the_log(
 
 
 def test_the_fields_are_the_ones_the_request_log_writes() -> None:
-    assert LOG_FIELDS == ("request_id", "account", "key")
+    assert LOG_FIELDS == ("request_id", "account", "key", "code")
 
 
 def test_the_level_sets_the_server_and_uvicorn_and_the_http_libraries_stay_quiet() -> None:

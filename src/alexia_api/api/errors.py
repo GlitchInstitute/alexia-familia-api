@@ -23,7 +23,7 @@ from fastapi.responses import JSONResponse, Response
 from pydantic import AwareDatetime, Field
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from alexia_api.api.middleware import protective_headers
+from alexia_api.api.middleware import UNHANDLED_CODE, protective_headers
 from alexia_api.domain.base import Model
 from alexia_api.domain.errors import (
     ActionRequiredInPortal,
@@ -230,6 +230,7 @@ def problem_response(
     extra: Mapping[str, Any] | None = None,
 ) -> JSONResponse:
     request_id = request_id_of(request)
+    request.state.problem_code = code
     problem = Problem(
         title=title_of(status),
         status=status,
@@ -352,7 +353,7 @@ async def _unhandled(request: Request, error: Exception) -> Response:
     return problem_response(
         request,
         HTTPStatus.INTERNAL_SERVER_ERROR,
-        "internal_error",
+        UNHANDLED_CODE,
         "something went wrong inside the server, quote the request id to the operator",
     )
 

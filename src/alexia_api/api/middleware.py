@@ -2,7 +2,10 @@
 
 The log line names the route template and not the path, so a child's name or a student id in a
 URL never reaches a log. It holds the method, the template, the status, the time taken, the
-request id, and the account and key names, which an operator chose and which are safe to log.
+request id, the account and key names, which an operator chose and which are safe to log, and
+the `code` of the problem when the request failed. The account name comes from the account that
+answered and never from the path, because a caller types the path and a name with a line break
+in it would forge a line of the log. The code comes from the server's own list of problems.
 """
 
 import logging
@@ -21,6 +24,7 @@ access_log = logging.getLogger("alexia_api.access")
 
 REQUEST_ID_HEADER: Final = "x-request-id"
 UNMATCHED_ROUTE: Final = "unmatched"
+UNHANDLED_CODE: Final = "internal_error"
 API_CONTENT_SECURITY_POLICY: Final = "default-src 'none'; frame-ancestors 'none'"
 _ACCEPTED_REQUEST_ID: Final = re.compile(r"[A-Za-z0-9._~-]{8,64}")
 _HOST_HEADER: Final = re.compile(r"(?P<name>\[[0-9a-f:.]+\]|[a-z0-9_.-]+)(:[0-9]{1,5})?")
@@ -145,6 +149,10 @@ class RequestContext:
 
         try:
             await self.app(scope, receive, send_with_headers)
+        except Exception:
+            # The handler for an unexpected error runs outside this class, after the line below.
+            scope["state"]["problem_code"] = UNHANDLED_CODE
+            raise
         finally:
             self._log(scope, request_id, status, started)
 
@@ -152,6 +160,7 @@ class RequestContext:
     def _log(scope: Scope, request_id: str, status: int, started: float) -> None:
         route = getattr(scope.get("route"), "path", None) or UNMATCHED_ROUTE
         milliseconds = round((time.perf_counter() - started) * 1000)
+        state = scope.get("state", {})
         access_log.info(
             "%s %s %d %dms",
             scope["method"],
@@ -160,7 +169,8 @@ class RequestContext:
             milliseconds,
             extra={
                 "request_id": request_id,
-                "account": scope.get("path_params", {}).get("account"),
-                "key": scope.get("state", {}).get("key_name"),
+                "account": state.get("account_name"),
+                "key": state.get("key_name"),
+                "code": state.get("problem_code"),
             },
         )
