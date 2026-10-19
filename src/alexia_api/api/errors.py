@@ -15,12 +15,12 @@ import logging
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
 from http import HTTPStatus
-from typing import TYPE_CHECKING, Any, Final, assert_never, cast
+from typing import TYPE_CHECKING, Any, Final, Literal, assert_never, cast
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, Response
-from pydantic import AwareDatetime, Field
+from pydantic import AwareDatetime, ConfigDict, Field
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from alexia_api.api.middleware import UNHANDLED_CODE, protective_headers
@@ -109,8 +109,9 @@ class FieldProblem(Model):
 class Problem(Model):
     """An RFC 9457 problem document. Members past `request_id` appear only when they apply."""
 
-    type: str = Field(
-        default="about:blank",
+    model_config = ConfigDict(json_schema_serialization_defaults_required=False)
+
+    type: Literal["about:blank"] = Field(
         description="Always about:blank. Use `code`, which is stable, to tell problems apart.",
     )
     title: str = Field(description="The standard name of the HTTP status.")
@@ -232,6 +233,7 @@ def problem_response(
     request_id = request_id_of(request)
     request.state.problem_code = code
     problem = Problem(
+        type="about:blank",
         title=title_of(status),
         status=status,
         detail=detail,

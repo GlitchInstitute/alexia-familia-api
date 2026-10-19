@@ -276,8 +276,8 @@ class Settings(BaseSettings):
     restore_unread: bool = Field(
         default=False,
         description=(
-            "Puts a message back to unread at the portal after the API opened it. "
-            "Reading a message marks it read at the portal otherwise."
+            "Puts a message back to unread at the portal after the API opened it, for the case "
+            "that opening a message marks it read there. Nothing is put back while this is off."
         ),
     )
     min_spacing_seconds: float = Field(

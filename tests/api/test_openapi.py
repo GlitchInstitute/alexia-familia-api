@@ -264,9 +264,16 @@ async def test_a_calendar_route_documents_its_file_its_reach_and_its_key(
 
 async def test_the_problem_schema_lists_what_a_client_can_rely_on(api: Api) -> None:
     problem = (await schema_of(api))["components"]["schemas"]["Problem"]
-    assert {"title", "status", "detail", "code", "request_id"} <= set(problem["required"])
-    assert "type" not in problem["required"]
-    assert problem["properties"]["type"]["default"] == "about:blank"
+    assert set(problem["required"]) == {"type", "title", "status", "detail", "code", "request_id"}
+    assert problem["properties"]["type"]["const"] == "about:blank"
+
+
+async def test_a_field_with_a_default_is_required_because_every_answer_carries_it(
+    api: Api,
+) -> None:
+    schemas = (await schema_of(api))["components"]["schemas"]
+    assert schemas["LoggedOut"]["required"] == ["state"]
+    assert {"state", "cause", "since", "interstitial"} == set(schemas["Blocked"]["required"])
 
 
 def test_the_document_follows_the_openapi_standard() -> None:

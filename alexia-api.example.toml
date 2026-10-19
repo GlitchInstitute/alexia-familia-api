@@ -23,8 +23,8 @@
 # Lets the server answer forms. This needs allow_writes as well.
 # allow_forms = false
 
-# Puts a message back to unread at the portal after the API opened it. Reading a message
-# marks it read at the portal otherwise.
+# Puts a message back to unread at the portal after the API opened it, for the case that
+# opening a message marks it read there. Nothing is put back while this is off.
 # restore_unread = false
 
 # The least number of seconds between two requests to the same portal. A pause keeps the
