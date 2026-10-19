@@ -33,6 +33,7 @@ async def concrete_values(api: Api) -> dict[str, str]:
         "account": "marta",
         "child": "mateo",
         "staff": synthetic_guid(0x604),
+        "form": synthetic_guid(0x1401),
         "day": "2026-01-06",
         "message": with_file,
         "attachment": message["attachments"][0]["id"],

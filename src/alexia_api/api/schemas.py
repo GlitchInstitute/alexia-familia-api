@@ -14,6 +14,7 @@ from alexia_api.domain.accounts import Account
 from alexia_api.domain.agenda import AgendaEvent
 from alexia_api.domain.base import Model
 from alexia_api.domain.children import Child, StaffMember
+from alexia_api.domain.forms import FormSummary
 from alexia_api.domain.meetings import AvailableSlot, Meeting
 from alexia_api.domain.messages import Folder, MessageSummary
 
@@ -117,6 +118,18 @@ class MessagePage(Model):
     truncated: bool = Field(
         description=(
             "True when the folder is longer than this server reads. The newest messages are "
+            "here and the oldest are left out."
+        )
+    )
+
+
+class FormList(Model):
+    """The forms the portal lists for the guardian, newest first."""
+
+    items: tuple[FormSummary, ...]
+    truncated: bool = Field(
+        description=(
+            "True when the portal lists more forms than this server reads. The newest forms are "
             "here and the oldest are left out."
         )
     )

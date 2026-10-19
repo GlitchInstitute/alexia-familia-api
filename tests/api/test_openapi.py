@@ -74,6 +74,8 @@ async def test_the_operation_ids_read_well_in_a_generated_client(api: Api) -> No
         "list_messages",
         "get_message",
         "download_attachment",
+        "list_forms",
+        "get_form",
         "get_child_agenda",
         "get_guardian_agenda",
         "get_child_calendar",
@@ -174,6 +176,8 @@ async def test_cached_reads_document_their_cache_headers(api: Api) -> None:
         "/v1/accounts/{account}/folders",
         "/v1/accounts/{account}/messages",
         "/v1/accounts/{account}/messages/{message}",
+        "/v1/accounts/{account}/forms",
+        "/v1/accounts/{account}/forms/{form}",
     ):
         headers = paths[path]["get"]["responses"]["200"]["headers"]
         assert set(headers) == {"X-Cache", "Age"}, path
@@ -253,6 +257,25 @@ async def test_the_meetings_route_documents_which_words_it_knows(api: Api) -> No
     assert "`unknown`" in operation["description"]
     assert "`state_label`" in operation["description"]
     assert "portal_changed" in operation["description"]
+
+
+async def test_the_forms_routes_document_what_they_read_and_what_they_do_not(api: Api) -> None:
+    paths = (await schema_of(api))["paths"]
+    prefix = "/v1/accounts/{account}/forms"
+    forms, form = paths[prefix]["get"], paths[f"{prefix}/{{form}}"]["get"]
+
+    assert {item["name"] for item in forms["parameters"]} == {"account", "fresh"}
+    assert {item["name"] for item in form["parameters"]} == {"account", "form", "fresh"}
+    for operation in (forms, form):
+        assert {"401", "403", "404", "422", "429", "500", "502", "503", "504"} <= set(
+            operation["responses"]
+        )
+    assert "cannot tell whether a form was answered" in forms["description"]
+    assert "ends the session" in forms["description"]
+    assert "portal_changed" in forms["description"]
+    assert "unexpected_reply" in forms["description"]
+    assert "may mark it as read" in form["description"]
+    assert "are not served" in form["description"]
 
 
 async def test_the_availability_routes_document_their_parameters_and_refusals(api: Api) -> None:

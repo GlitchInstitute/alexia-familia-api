@@ -3776,6 +3776,347 @@
           }
         }
       }
+    },
+    "/v1/accounts/{account}/forms": {
+      "get": {
+        "tags": [
+          "forms"
+        ],
+        "summary": "List the forms of an account",
+        "description": "Needs the `read` scope. These are the forms that the school asks the guardian to answer, such as an authorization or a survey, newest first. The portal belongs to the guardian and not to a child, so the list holds the forms for every child of the account. This server only reads them. It does not read the questions of a form and it cannot tell whether a form was answered, so a guardian answers in the portal itself. The portal shows the forms and the messages in the same place, so a read switches its list to the forms and back, and a read that fails in between ends the session, which costs one more login. No real list of forms has been read while building this route. The server checks that the portal's page says that it lists forms, and a page that does not fails with `unexpected_reply`. A list that is shaped in a way the server does not know fails with `portal_changed`.",
+        "operationId": "list_forms",
+        "security": [
+          {
+            "BearerKey": []
+          },
+          {
+            "HeaderKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "account",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "The account's name, as the operator wrote it in the settings.",
+              "title": "Account"
+            },
+            "description": "The account's name, as the operator wrote it in the settings."
+          },
+          {
+            "name": "fresh",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Ignore the stored answer and ask the portal again. The server still paces its requests, so use this when you know something changed and not on a timer.",
+              "default": false,
+              "title": "Fresh"
+            },
+            "description": "Ignore the stored answer and ask the portal again. The server still paces its requests, so use this when you know something changed and not on a timer."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FormList"
+                }
+              }
+            },
+            "headers": {
+              "X-Cache": {
+                "description": "`hit` when the answer was stored, `miss` when it was just read from the portal, `bypass` when `fresh=true` forced a new read.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "hit",
+                    "miss",
+                    "bypass"
+                  ]
+                }
+              },
+              "Age": {
+                "description": "How many seconds old the answer is.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/accounts/{account}/forms/{form}": {
+      "get": {
+        "tags": [
+          "forms"
+        ],
+        "summary": "Read one form",
+        "description": "Needs the `read` scope. Gives the form as the list shows it, together with when the school sent it and its words. `body.html` is safe to show, and `body.text` holds the same words as plain text. The form must be in the list of forms. The server stores a form after it reads it, so asking again is cheap. `fresh=true` reads the form again, and the list too. Opening a form in the portal may mark it as read there, and this server cannot tell whether it does. Files that came with a form are not served.",
+        "operationId": "get_form",
+        "security": [
+          {
+            "BearerKey": []
+          },
+          {
+            "HeaderKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "form",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "The form's id, as the list of forms shows it. Letter case does not matter.",
+              "title": "Form"
+            },
+            "description": "The form's id, as the list of forms shows it. Letter case does not matter."
+          },
+          {
+            "name": "account",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "The account's name, as the operator wrote it in the settings.",
+              "title": "Account"
+            },
+            "description": "The account's name, as the operator wrote it in the settings."
+          },
+          {
+            "name": "fresh",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Ignore the stored answer and ask the portal again. The server still paces its requests, so use this when you know something changed and not on a timer.",
+              "default": false,
+              "title": "Fresh"
+            },
+            "description": "Ignore the stored answer and ask the portal again. The server still paces its requests, so use this when you know something changed and not on a timer."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Form"
+                }
+              }
+            },
+            "headers": {
+              "X-Cache": {
+                "description": "`hit` when the answer was stored, `miss` when it was just read from the portal, `bypass` when `fresh=true` forced a new read.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "hit",
+                    "miss",
+                    "bypass"
+                  ]
+                }
+              },
+              "Age": {
+                "description": "How many seconds old the answer is.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -4546,6 +4887,188 @@
           "items"
         ],
         "title": "FolderList"
+      },
+      "Form": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "The portal's form id. The detail route takes it."
+          },
+          "subject": {
+            "type": "string",
+            "title": "Subject",
+            "description": "The subject line, which says what the school asks for."
+          },
+          "sender": {
+            "type": "string",
+            "title": "Sender",
+            "description": "The sender's name as the portal shows it."
+          },
+          "received_on": {
+            "type": "string",
+            "format": "date",
+            "title": "Received On",
+            "description": "The day the portal lists the form under, on the school's calendar."
+          },
+          "expires_on": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires On",
+            "description": "The last day the portal shows the form, when it has one."
+          },
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category",
+            "description": "The category the portal files the form under."
+          },
+          "sent_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Sent At",
+            "description": "When the school sent the form, to the minute, with the school's offset. The list gives only a day, and the time comes from the form itself."
+          },
+          "body": {
+            "$ref": "#/components/schemas/Body",
+            "description": "The words of the form."
+          },
+          "links": {
+            "items": {
+              "$ref": "#/components/schemas/Link"
+            },
+            "type": "array",
+            "title": "Links",
+            "description": "The addresses in the body, each once. The ones in links come first."
+          },
+          "child_names": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Child Names",
+            "description": "The names of the children the portal says the form is about, in the one text the portal writes them in, or null when it names none. The portal gives names and no ids, so this API cannot tie them to its list of children."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "subject",
+          "sender",
+          "received_on",
+          "expires_on",
+          "category",
+          "sent_at",
+          "body",
+          "links",
+          "child_names"
+        ],
+        "title": "Form",
+        "description": "A form with its words. The fields of its row in the list come first."
+      },
+      "FormList": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/FormSummary"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "truncated": {
+            "type": "boolean",
+            "title": "Truncated",
+            "description": "True when the portal lists more forms than this server reads. The newest forms are here and the oldest are left out."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "items",
+          "truncated"
+        ],
+        "title": "FormList",
+        "description": "The forms the portal lists for the guardian, newest first."
+      },
+      "FormSummary": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "The portal's form id. The detail route takes it."
+          },
+          "subject": {
+            "type": "string",
+            "title": "Subject",
+            "description": "The subject line, which says what the school asks for."
+          },
+          "sender": {
+            "type": "string",
+            "title": "Sender",
+            "description": "The sender's name as the portal shows it."
+          },
+          "received_on": {
+            "type": "string",
+            "format": "date",
+            "title": "Received On",
+            "description": "The day the portal lists the form under, on the school's calendar."
+          },
+          "expires_on": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires On",
+            "description": "The last day the portal shows the form, when it has one."
+          },
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category",
+            "description": "The category the portal files the form under."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "subject",
+          "sender",
+          "received_on",
+          "expires_on",
+          "category"
+        ],
+        "title": "FormSummary",
+        "description": "A form as the portal lists it, without its words."
       },
       "Health": {
         "properties": {
@@ -5512,6 +6035,10 @@
     {
       "name": "messages",
       "description": "The message folders of an account and the messages in them."
+    },
+    {
+      "name": "forms",
+      "description": "The forms that the school asks a guardian to answer, such as authorizations and surveys. They are read only."
     }
   ]
 }

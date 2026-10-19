@@ -40,6 +40,8 @@ Every route lives at the address of your server, for example `http://127.0.0.1:8
 | GET | `/v1/accounts/{account}/messages` | [List the messages in a folder](#list-the-messages-in-a-folder) |
 | GET | `/v1/accounts/{account}/messages/{message}` | [Read one message](#read-one-message) |
 | GET | `/v1/accounts/{account}/messages/{message}/attachments/{attachment}` | [Download one file of a message](#download-one-file-of-a-message) |
+| GET | `/v1/accounts/{account}/forms` | [List the forms of an account](#list-the-forms-of-an-account) |
+| GET | `/v1/accounts/{account}/forms/{form}` | [Read one form](#read-one-form) |
 
 ## Routes for meta
 
@@ -768,6 +770,77 @@ The `200` answer carries these headers.
 
 A failure answers `401`, `403`, `404`, `413`, `422`, `429`, `500`, `502`, `503`, or `504` with a [Problem](#problem) as `application/problem+json`. The [errors page](errors.md) lists every `code`.
 
+## Routes for forms
+
+The forms that the school asks a guardian to answer, such as authorizations and surveys. They are read only.
+
+### List the forms of an account
+
+`GET /v1/accounts/{account}/forms`
+
+Needs the `read` scope. These are the forms that the school asks the guardian to answer, such as an authorization or a survey, newest first. The portal belongs to the guardian and not to a child, so the list holds the forms for every child of the account. This server only reads them. It does not read the questions of a form and it cannot tell whether a form was answered, so a guardian answers in the portal itself. The portal shows the forms and the messages in the same place, so a read switches its list to the forms and back, and a read that fails in between ends the session, which costs one more login. No real list of forms has been read while building this route. The server checks that the portal's page says that it lists forms, and a page that does not fails with `unexpected_reply`. A list that is shaped in a way the server does not know fails with `portal_changed`.
+
+**Key.** Send one as `Authorization: Bearer <key>` or `X-API-Key: <key>`.
+
+**Path parameters**
+
+| Name | Kind | What it is |
+| --- | --- | --- |
+| `account` | text | The account's name, as the operator wrote it in the settings. |
+
+**Query parameters**
+
+| Name | Kind | Default | What it does |
+| --- | --- | --- | --- |
+| `fresh` | true or false | `false` | Ignore the stored answer and ask the portal again. The server still paces its requests, so use this when you know something changed and not on a timer. |
+
+**Answers**
+
+- `200` returns [FormList](#formlist) as `application/json`.
+
+The `200` answer carries these headers.
+
+| Header | What it says |
+| --- | --- |
+| `X-Cache` | `hit` when the answer was stored, `miss` when it was just read from the portal, `bypass` when `fresh=true` forced a new read. |
+| `Age` | How many seconds old the answer is. |
+
+A failure answers `401`, `403`, `404`, `422`, `429`, `500`, `502`, `503`, or `504` with a [Problem](#problem) as `application/problem+json`. The [errors page](errors.md) lists every `code`.
+
+### Read one form
+
+`GET /v1/accounts/{account}/forms/{form}`
+
+Needs the `read` scope. Gives the form as the list shows it, together with when the school sent it and its words. `body.html` is safe to show, and `body.text` holds the same words as plain text. The form must be in the list of forms. The server stores a form after it reads it, so asking again is cheap. `fresh=true` reads the form again, and the list too. Opening a form in the portal may mark it as read there, and this server cannot tell whether it does. Files that came with a form are not served.
+
+**Key.** Send one as `Authorization: Bearer <key>` or `X-API-Key: <key>`.
+
+**Path parameters**
+
+| Name | Kind | What it is |
+| --- | --- | --- |
+| `form` | text | The form's id, as the list of forms shows it. Letter case does not matter. |
+| `account` | text | The account's name, as the operator wrote it in the settings. |
+
+**Query parameters**
+
+| Name | Kind | Default | What it does |
+| --- | --- | --- | --- |
+| `fresh` | true or false | `false` | Ignore the stored answer and ask the portal again. The server still paces its requests, so use this when you know something changed and not on a timer. |
+
+**Answers**
+
+- `200` returns [Form](#form) as `application/json`.
+
+The `200` answer carries these headers.
+
+| Header | What it says |
+| --- | --- |
+| `X-Cache` | `hit` when the answer was stored, `miss` when it was just read from the portal, `bypass` when `fresh=true` forced a new read. |
+| `Age` | How many seconds old the answer is. |
+
+A failure answers `401`, `403`, `404`, `422`, `429`, `500`, `502`, `503`, or `504` with a [Problem](#problem) as `application/problem+json`. The [errors page](errors.md) lists every `code`.
+
 ## Models
 
 ### Absence
@@ -974,6 +1047,45 @@ A folder of messages, as the portal lists it.
 | Field | Kind | What it says |
 | --- | --- | --- |
 | `items` | list of [Folder](#folder) |  |
+
+### Form
+
+A form with its words. The fields of its row in the list come first.
+
+| Field | Kind | What it says |
+| --- | --- | --- |
+| `id` | text | The portal's form id. The detail route takes it. |
+| `subject` | text | The subject line, which says what the school asks for. |
+| `sender` | text | The sender's name as the portal shows it. |
+| `received_on` | date, written `YYYY-MM-DD` | The day the portal lists the form under, on the school's calendar. |
+| `expires_on` | date, written `YYYY-MM-DD` or null | The last day the portal shows the form, when it has one. |
+| `category` | text or null | The category the portal files the form under. |
+| `sent_at` | date and time with an offset | When the school sent the form, to the minute, with the school's offset. The list gives only a day, and the time comes from the form itself. |
+| `body` | [Body](#body) | The words of the form. |
+| `links` | list of [Link](#link) | The addresses in the body, each once. The ones in links come first. |
+| `child_names` | text or null | The names of the children the portal says the form is about, in the one text the portal writes them in, or null when it names none. The portal gives names and no ids, so this API cannot tie them to its list of children. |
+
+### FormList
+
+The forms the portal lists for the guardian, newest first.
+
+| Field | Kind | What it says |
+| --- | --- | --- |
+| `items` | list of [FormSummary](#formsummary) |  |
+| `truncated` | true or false | True when the portal lists more forms than this server reads. The newest forms are here and the oldest are left out. |
+
+### FormSummary
+
+A form as the portal lists it, without its words.
+
+| Field | Kind | What it says |
+| --- | --- | --- |
+| `id` | text | The portal's form id. The detail route takes it. |
+| `subject` | text | The subject line, which says what the school asks for. |
+| `sender` | text | The sender's name as the portal shows it. |
+| `received_on` | date, written `YYYY-MM-DD` | The day the portal lists the form under, on the school's calendar. |
+| `expires_on` | date, written `YYYY-MM-DD` or null | The last day the portal shows the form, when it has one. |
+| `category` | text or null | The category the portal files the form under. |
 
 ### Health
 

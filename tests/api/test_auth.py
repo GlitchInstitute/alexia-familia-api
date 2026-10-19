@@ -19,6 +19,8 @@ ACCOUNT_DATA_ROUTES = (
     "/v1/accounts/marta/messages",
     f"/v1/accounts/marta/messages/{synthetic_guid(0x1001)}",
     f"/v1/accounts/marta/messages/{synthetic_guid(0x1002)}/attachments/dG9rZW4",
+    "/v1/accounts/marta/forms",
+    f"/v1/accounts/marta/forms/{synthetic_guid(0x1401)}",
 )
 
 

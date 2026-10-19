@@ -63,6 +63,7 @@ class Suggestion:
 
 
 _MUSEUM_MESSAGE: Final = f"/v1/accounts/marta/messages/{synthetic_guid(0x1002)}"
+_ZOO_FORM: Final = f"/v1/accounts/marta/forms/{synthetic_guid(0x1401)}"
 
 CALENDAR_PATH: Final = "/v1/accounts/marta/agenda.ics"
 """The calendar that the banner offers to a calendar app."""
@@ -101,6 +102,11 @@ TOUR: Final = (
         "the file of that message",
         save_as="museo.pdf",
     ),
+    Suggestion(
+        "/v1/accounts/marta/forms",
+        "the authorizations and surveys that the school asks a guardian to answer",
+    ),
+    Suggestion(_ZOO_FORM, "one of those forms, with its words"),
     Suggestion(
         CALENDAR_PATH,
         "the calendar of the whole family, as a file to look at",
