@@ -60,6 +60,8 @@ include = [
   "/README.md",
   "/LICENSE",
   "/CHANGELOG.md",
+  "/SECURITY.md",
+  "/CONTRIBUTING.md",
   "/alexia-api.example.toml",
   "/.env.example",
   "/Dockerfile",

@@ -4,13 +4,29 @@ This page explains why alexia-familia-api is built the way it is. It records the
 
 ## What this is
 
-alexia-familia-api is a web server that you run yourself. It signs in to your Alexia Familia parent account, reads what the school publishes about your children, and serves it as a JSON REST API with an OpenAPI description. With the right switches on, it also sends replies, meeting requests, and form answers.
+alexia-familia-api is a web server that you run yourself. It signs in to your Alexia Familia parent account, reads what the school publishes about your children, and serves it as a JSON REST API with an OpenAPI description. The design adds replies, meeting requests, and form answers behind switches that stay off by default. [What is built](#what-is-built) says how far the code has come.
 
 It is for three kinds of reader.
 
 - A parent who wants school data in Home Assistant, a spreadsheet, a calendar app, or a script.
 - A developer who builds a family app and wants clean JSON instead of a WebForms portal.
 - A maintainer who has to keep the server working when the portal changes.
+
+## What is built
+
+This page describes the whole design, and the code has not reached all of it. Each row says where a part stands, and the table changes as parts land.
+
+| Part | State |
+| --- | --- |
+| The portal client, with login, session, breaker, allowlist, and politeness rules | Built |
+| Readers for the children, the tracking counters, the staff, the folders, the messages, the files, and the agenda | Built |
+| The REST API for those readers, with keys, scopes, rate limits, problem documents, caching, and calendar files | Built |
+| The command line, the demo with a simulated school, the doctor, the Docker image, and CI | Built |
+| Readers for meetings, absences, forms, and contacts | Not built |
+| Writes and the outbox | Not built. Every call in the allowlist reads, so the write settings change nothing yet |
+| Putting a message back to unread | Not built |
+
+A section below that describes a part marked "Not built" says so.
 
 ## Goals
 
@@ -41,13 +57,13 @@ These facts shape every decision below. The full notes are in [protocol.md](prot
 
 ## Architecture
 
-The code has four layers. Imports point down and never up. A test parses the source and fails when a layer imports one above it.
+The code has four layers. Imports point down and never up. A test in `tests/test_layers.py` parses the source and fails when a layer imports one above it, when `domain` imports anything but pydantic, or when a layer other than `api` and `sim` imports the web framework. The command line, the demo, the doctor, and a few small modules are shells around the layers, and they may import any layer, but no layer may import them.
 
 ```mermaid
 flowchart LR
     client[API client] --> api
     subgraph server [alexia-familia-api]
-        api[api: auth, errors, routes] --> services[services: caches, outbox]
+        api[api: auth, errors, routes] --> services[services: caches, keys, health]
         services --> portal[portal: session, readers, writers]
         portal --> domain[domain: ids, models, errors, time]
     end
@@ -57,7 +73,7 @@ flowchart LR
 
 - `domain` holds the identifiers, the models, the error union, and the time rules. It does no I/O and imports no framework.
 - `portal` is the only code that knows how the portal works. It owns the cookie jar, pacing, redirects, the allowlist of calls, login, the breaker, and one reader or writer per portal feature. Parsers are pure functions from text to models.
-- `services` holds what a server needs and the portal does not. It owns the per-account caches, child resolution, message snapshots, and the outbox.
+- `services` holds what a server needs and the portal does not. It owns the registry of accounts and their gateways, the per-account caches, the API keys, the rate limit, and the health report. The outbox will live here when writes arrive.
 - `api` is FastAPI. It authenticates, validates, maps errors to problem documents, and calls one service method per route.
 - `sim` is a fake portal. It imports nothing from `services` or `api`. Tests and the demo mode use it.
 
@@ -78,8 +94,8 @@ An account is one set of portal credentials. A server holds one or more accounts
 Resources nest the way the data does.
 
 - `/v1/accounts/{account}` is the account.
-- `/v1/accounts/{account}/children/{child}/...` holds what belongs to one child, such as tracking, staff, agenda, meetings, and absences.
-- `/v1/accounts/{account}/messages`, `/folders`, `/contacts`, and `/forms` belong to the guardian. The portal keeps one inbox per login, not one per child.
+- `/v1/accounts/{account}/children/{child}/...` holds what belongs to one child. Tracking, staff, and the agenda are built. Meetings and absences are planned.
+- `/v1/accounts/{account}/messages` and `/folders` belong to the guardian, and so will `/contacts` and `/forms`. The portal keeps one inbox per login, not one per child.
 
 A `{child}` segment accepts the student id or a slug. The server derives the slug from the child's first name in lower case ASCII, adds `-2` on a collision, and lets the operator pin slugs in the configuration so URLs stay stable. A message names the children it concerns in free text. The server returns that text and the ids of the children whose names it contains.
 
@@ -128,7 +144,7 @@ Reads and writes are different kinds of call.
 
 ### Outbox
 
-A write is a two-step resource, so a script cannot send by accident and a retry cannot send twice.
+Nothing in the code writes to the portal yet, and this is the design for when something does. A write is a two-step resource, so a script cannot send by accident and a retry cannot send twice.
 
 ```mermaid
 stateDiagram-v2
@@ -154,7 +170,8 @@ Messages are checked after the portal saves the draft. The server reads the draf
 
 - The API is JSON over HTTP under `/v1`. A breaking change gets `/v2`. New fields and endpoints are not breaking.
 - Dates are `YYYY-MM-DD`. Times are ISO 8601 with an offset in the configured time zone, `Europe/Madrid` by default.
-- Every list is an object with an `items` array, so a field can be added later. Message lists add `page`, `page_size`, `total`, and `has_more`.
+- Every list is an object with an `items` array, so a field can be added later. Message lists add `total`, `limit`, `offset`, `next_offset`, and `truncated`.
+- A calendar file writes a timed entry as a moment in UTC and an all-day entry as a date. It carries no time zone rules, because calendar apps disagree about how to read them. See [calendars.md](calendars.md#what-a-calendar-holds).
 - Errors are RFC 9457 problem documents with a stable `code`, a `request_id`, and no stack trace.
 - Responses carry `X-Request-Id`, `X-Cache`, and `Age`. Responses to authenticated routes carry `Cache-Control: no-store`.
 - Authentication uses `Authorization: Bearer <key>` or `X-API-Key`. Keys are stored as SHA-256 hashes and compared in constant time.
@@ -163,20 +180,21 @@ Messages are checked after the portal saves the draft. The server reads the draf
 
 ## Persistence
 
-The state directory holds three kinds of file.
+The state directory holds two kinds of file today.
 
 - `breaker/<account>.json` holds the block state, a reason code, and a time. It holds no credentials.
-- `outbox.jsonl` holds one line per outbox transition with item id, kind, state, hash, and time. It holds no message text.
 - `api-keys.json` holds key names, scopes, accounts, and SHA-256 hashes. The CLI writes it, and the server rereads it when it changes.
 
-Everything else is in memory and disappears on restart. A prepared outbox item is in memory, so a restart discards it.
+A third kind arrives with writes. `outbox.jsonl` will hold one line per outbox transition with item id, kind, state, hash, and time, and no message text.
+
+Everything else is in memory and disappears on restart. A prepared outbox item will be in memory too, so a restart discards it.
 
 ## Privacy
 
 The server handles a child's school data, so it collects as little as it can.
 
 - The server stores no messages, attachments, agenda, or names on disk.
-- Logs hold request ids, route templates, status codes, durations, account ids, and key names. They hold no child names, message text, query values, cookies, or credentials. Route templates stand in for raw paths, so a child's slug never reaches a log.
+- Logs hold request ids, route templates, status codes, durations, account names, key names, and the code of a failed request. They hold no child names, message text, query values, cookies, or credentials. Route templates stand in for raw paths, so a child's slug never reaches a log. An account name comes from the account that answered and not from the path, because a caller types the path, and a name with a line break in it would forge a line of the log.
 - The server makes no outbound calls except to the configured portal base URLs. It has no telemetry. The optional documentation pages load Swagger UI assets from a public CDN in the browser, and a setting turns those pages off.
 - The portal password is a secret string in memory. It never appears in responses, errors, logs, or OpenAPI.
 
@@ -184,9 +202,10 @@ The server handles a child's school data, so it collects as little as it can.
 
 - Pure parsers and the time rules have unit tests with literal expected values.
 - The simulator implements the portal's shapes for several families with several children. Tests drive the real session, gateway, and routes against it in-process.
-- The simulator has fault switches for dropped responses, changed shapes, expired sessions, maintenance pages, and refused logins. Each failure path in the table above has a test.
-- A smoke script starts the real server and the simulator on real sockets and calls every endpoint. CI runs it.
+- The simulator has fault switches for dropped responses, changed shapes, expired sessions, maintenance pages, and refused logins. Tests turn them on to check how the client fails.
+- A smoke script runs the demo inside the Docker image and asks for every request that the demo suggests, over a real socket. CI runs it.
 - A drift test regenerates the OpenAPI document and the endpoint reference and fails when they differ from the committed copies.
+- A layer test reads every import in the package and fails when one points up. Another test fails when a source file outside the allowlist names a method that the client must never call.
 
 The simulator and the parsers come from one author, so passing tests prove consistency and not truth. [protocol.md](protocol.md) labels every endpoint with how it was verified.
 
@@ -208,6 +227,7 @@ The simulator and the parsers come from one author, so passing tests prove consi
 | Cache | Per account, short time-to-live, shared reads | None, long-lived mirror | Fresh enough for a dashboard, and kind to the portal. |
 | Message lists | One snapshot per folder, filtered in memory | Pass-through paging with live filters | Stable pages, any filter, and few portal calls. |
 | Error format | RFC 9457 problem documents | Custom JSON | Clients and tools already understand it. |
+| Calendar times | UTC moments and dates, with no zone rules | A `VTIMEZONE` with `TZID` on each time, floating local times | One independent reader cut the generated zone rules short and showed summer lessons an hour off. A UTC moment reads the same in every app. |
 | Session persistence | None | Sealed cookie files | A new login is cheap. The breaker file stops crash loops without storing a session. |
 | Background sync | None | A polling worker | Idle servers send no traffic, and behavior is easier to predict. |
 
@@ -217,7 +237,7 @@ These are the strongest arguments against the design and the answers.
 
 - The school may forbid automated access. The tool reads only the guardian's own account, sends one request at a time, says what it is, and stops at the first refusal. The README tells operators to check their school's rules and to stop if asked.
 - The portal can change shape. Every reader checks cell counts and field types and fails with a `portal_changed` error instead of returning wrong data. A fix is one reader and one simulator route.
-- Writes were never run on a real portal. They are off by default, double-gated, previewed, and labeled unverified in the docs and in the OpenAPI text.
+- Writes were never run on a real portal, and none is built yet. When they land they will be off by default, double-gated, previewed, and labeled unverified in the docs and in the OpenAPI text.
 - A memory-only design loses prepared items on restart. That costs one extra call and keeps message text off the disk.
 - One process and one lock per account cap the throughput. That is on purpose, because the portal is the bottleneck and the aim is to be gentle.
 - A feed key in a URL can leak. The key opens only calendar data, an operator can revoke it without touching other keys, and logs record route templates, not queries.
@@ -230,3 +250,4 @@ These need an owner decision and have a default.
 - License. The default is MIT.
 - Package and image publishing. The default is none until a first release.
 - A Spanish translation of the quickstart. The default is English only.
+- Keys for one child. A key limits the accounts it opens and not the children, so a key for a calendar app opens every child of the account. The default is to keep it that way until someone needs a key for one child.
