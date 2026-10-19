@@ -172,7 +172,14 @@ async def test_a_session_the_portal_dropped_is_replaced_without_the_client_notic
 
 
 @pytest.mark.parametrize(
-    "path", [CHILDREN, f"{CHILDREN}/lucia", f"{CHILDREN}/lucia/tracking", f"{CHILDREN}/lucia/staff"]
+    "path",
+    [
+        CHILDREN,
+        f"{CHILDREN}/lucia",
+        f"{CHILDREN}/lucia/tracking",
+        f"{CHILDREN}/lucia/staff",
+        f"{CHILDREN}/mateo/absences",
+    ],
 )
 async def test_every_child_route_says_503_for_a_blocked_account(
     make_api: MakeApi, harness: Harness, path: str

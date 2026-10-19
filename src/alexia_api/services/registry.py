@@ -12,6 +12,7 @@ import httpx
 
 from alexia_api.clock import Clock, LocalClock, SystemClock
 from alexia_api.config import AccountSettings, CacheTtls, Settings, resolve_secrets
+from alexia_api.domain.absences import Absence
 from alexia_api.domain.accounts import Account, Capabilities
 from alexia_api.domain.agenda import AgendaEvent
 from alexia_api.domain.children import Child, Guardian, StaffMember, TrackingCounters, apply_pins
@@ -29,6 +30,7 @@ from alexia_api.domain.media import Download
 from alexia_api.domain.messages import Folder, FolderName, Message, MessageSummary
 from alexia_api.domain.security import Principal
 from alexia_api.domain.time import DateWindow
+from alexia_api.portal.absences import read_absences
 from alexia_api.portal.agenda import read_agenda
 from alexia_api.portal.attachments import download_attachment
 from alexia_api.portal.breaker import BREAKER_DIRECTORY, BreakerStore
@@ -138,6 +140,15 @@ class AccountRuntime:
             return tuple(await self._gateway.call(lambda tx: read_roster(tx, child.id)))
 
         return await self._cache.get(("staff", child.id), self._ttls.staff, load, fresh=fresh)
+
+    async def absences(self, child: Child, *, fresh: bool = False) -> Cached[tuple[Absence, ...]]:
+        """The absences and other attendance incidents that the portal lists for one child."""
+        return await self._cache.get(
+            ("absences", child.id),
+            self._ttls.absences,
+            lambda: self._gateway.call(lambda tx: read_absences(tx, child.id)),
+            fresh=fresh,
+        )
 
     async def agenda(
         self, child: Child, window: DateWindow, *, fresh: bool = False

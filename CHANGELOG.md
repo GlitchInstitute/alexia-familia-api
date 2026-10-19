@@ -8,6 +8,7 @@ This file follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and t
 
 - Run a REST API with `alexia-api serve`, with a typed OpenAPI description at `/openapi.json` and documentation pages at `/docs` and `/redoc`.
 - Read the children of an account, the counters the school tracks for each child, and the staff a guardian can meet.
+- Read the absences and other attendance incidents of a child, with the day, the kind of incident, and whether a reason was given and accepted. The portal's page lists only the days since the start of the month, and the route says so.
 - Read the agenda of a child and of the guardian as JSON, and subscribe to it as a calendar file for one child, for the guardian, or for the whole family.
 - Read the message folders of an account, page through the messages of a folder or only the unread ones, read a message with its text, links, and files, and download an attachment.
 - Hold several children on one login and several logins on one server. A route names a child by id or by a short name that stays stable.

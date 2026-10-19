@@ -65,6 +65,7 @@ async def test_the_operation_ids_read_well_in_a_generated_client(api: Api) -> No
         "list_accounts",
         "list_children",
         "get_tracking",
+        "list_absences",
         "check_connection",
         "list_folders",
         "list_messages",
@@ -158,6 +159,7 @@ async def test_cached_reads_document_their_cache_headers(api: Api) -> None:
         "/v1/accounts/{account}/children/{child}",
         "/v1/accounts/{account}/children/{child}/tracking",
         "/v1/accounts/{account}/children/{child}/staff",
+        "/v1/accounts/{account}/children/{child}/absences",
         "/v1/accounts/{account}/children/{child}/agenda",
         "/v1/accounts/{account}/guardian/agenda",
         "/v1/accounts/{account}/children/{child}/agenda.ics",
@@ -223,6 +225,18 @@ async def test_the_agenda_documents_its_range_its_kinds_and_its_limits(api: Api)
     assert "366 days" in operation["description"]
     assert "1100 days" in operation["description"]
     assert "invalid_window" in operation["description"]
+
+
+async def test_the_absences_route_documents_what_the_list_can_and_cannot_tell(api: Api) -> None:
+    path = "/v1/accounts/{account}/children/{child}/absences"
+    operation = (await schema_of(api))["paths"][path]["get"]
+
+    assert {"account", "child", "fresh"} == {item["name"] for item in operation["parameters"]}
+    assert {"401", "403", "404", "422", "429", "500", "502", "503", "504"} <= set(
+        operation["responses"]
+    )
+    assert "does not prove" in operation["description"]
+    assert "portal_changed" in operation["description"]
 
 
 async def test_the_guardian_agenda_documents_the_login_that_has_no_guardian(api: Api) -> None:

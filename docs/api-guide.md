@@ -18,7 +18,7 @@ A login at the portal holds all the children of a family, so an address names th
 | --- | --- | --- |
 | Server | `/`, `/healthz`, `/readyz` | Where things are, and whether the server is up. These need no key. |
 | Accounts | `/v1/accounts`, `/v1/accounts/{account}` | The portal logins this server holds, and the state of each. |
-| Children | `/v1/accounts/{account}/children/{child}/...` | What belongs to one child, such as the tracking counters, the staff, and the agenda. |
+| Children | `/v1/accounts/{account}/children/{child}/...` | What belongs to one child, such as the tracking counters, the staff, the absences, and the agenda. |
 | Guardian | `/v1/accounts/{account}/guardian/agenda` | The interviews and school events of the parent or guardian. |
 | Messages | `/v1/accounts/{account}/messages` and `/folders` | The inbox. It belongs to the login and not to a child, so it sits under the account. |
 | Calendars | `.../agenda.ics` | Calendar files for one child, for the guardian, or for the whole family. |
@@ -71,7 +71,7 @@ The `kind` parameter keeps some kinds of entries. Repeat it to keep several, as 
 
 ## Lists and pages
 
-Most lists come whole, wrapped in an object with an `items` list. That holds for the accounts, the children, the staff, and the folders. The agenda also says which days it covers, with `from` and `to`.
+Most lists come whole, wrapped in an object with an `items` list. That holds for the accounts, the children, the staff, the absences, and the folders. The agenda also says which days it covers, with `from` and `to`.
 
 Only the list of messages comes a page at a time, because an inbox can be long.
 
@@ -117,6 +117,42 @@ The answer says where you are.
 | `truncated` | True when the folder is longer than the server reads, so the oldest messages are missing. |
 
 Follow `next_offset` until it is `null`. Do not add up the page sizes yourself.
+
+## Absences
+
+`GET /v1/accounts/{account}/children/{child}/absences` lists the absences and the other attendance incidents that the portal records for one child, newest day first. A late arrival sits in the same list, and `incident` says which kind a row is.
+
+```json
+{
+  "items": [
+    {
+      "id": "5afe0000-0000-4000-8000-000000007501",
+      "occurred_on": "2026-10-14",
+      "hour": null,
+      "area": "Tutoría",
+      "teacher": "Rosa Prueba",
+      "incident": "Falta de asistencia",
+      "note": null,
+      "justifiable": true,
+      "justified": false,
+      "justification": null,
+      "accepted": false
+    }
+  ]
+}
+```
+
+| Field | What it means |
+| --- | --- |
+| `occurred_on` | The day of the incident. |
+| `hour`, `area`, `teacher`, `note` | What the portal shows in those columns, or `null` when a column is empty. |
+| `incident` | The portal's own words for the kind of incident. |
+| `justifiable` | False for an incident that the portal does not let a guardian justify, such as a late arrival. |
+| `justified` | Whether a reason was given. It is `null` when the portal's cell was not a clear yes or no. |
+| `justification` | The reason that was given, or `null`. |
+| `accepted` | Whether the school accepted the reason. It is `null` when the portal's cell was not a clear yes or no. |
+
+The portal's page lists the days from the first day of the current month to today. An older absence can be missing, so an empty list does not prove that a child has none. The server only reads the list, and a guardian justifies an absence in the portal. No real list has been read yet, so the [protocol notes](protocol.md#absences) label the cell formats as read from the portal's script and not as seen.
 
 The server reads a whole folder from the portal once and keeps it for a short time, so paging through a folder costs the portal a single read. The portal serves 50 messages at a time and the server reads at most 200 such pages. A normal inbox needs a few requests. The first read of a very long folder takes a while, because the server pauses between its requests to the portal.
 

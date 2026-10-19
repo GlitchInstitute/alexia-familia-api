@@ -244,6 +244,52 @@ async def test_staff_is_cached_for_longer_than_tracking(
     assert (await runtime.staff(lucia)).status == "hit"
 
 
+async def test_absences_are_read_for_the_child_asked_about(harness: Harness) -> None:
+    runtime = harness.registry().get("marta")
+    lucia = (await runtime.child("lucia")).value
+    mateo = (await runtime.child("mateo")).value
+
+    assert (await runtime.absences(lucia)).value == ()
+    assert [absence.id for absence in (await runtime.absences(mateo)).value] == [
+        synthetic_guid(0x7501 + index) for index in range(4)
+    ]
+
+
+async def test_absences_are_cached_for_each_child_on_their_own(harness: Harness) -> None:
+    runtime = harness.registry().get("marta")
+    lucia = (await runtime.child("lucia")).value
+    mateo = (await runtime.child("mateo")).value
+    await runtime.absences(lucia)
+    calls = len(harness.sim.requests)
+
+    again = await runtime.absences(lucia)
+    other = await runtime.absences(mateo)
+
+    assert (again.status, other.status) == ("hit", "miss")
+    assert len(harness.sim.requests) == calls + 2
+
+
+async def test_absences_and_tracking_of_a_child_are_kept_apart(harness: Harness) -> None:
+    runtime = harness.registry().get("marta")
+    mateo = (await runtime.child("mateo")).value
+    await runtime.tracking(mateo)
+
+    assert (await runtime.absences(mateo)).status == "miss"
+    assert (await runtime.tracking(mateo)).status == "hit"
+
+
+async def test_a_fresh_look_at_absences_reads_the_portal_again(harness: Harness) -> None:
+    runtime = harness.registry().get("marta")
+    mateo = (await runtime.child("mateo")).value
+    await runtime.absences(mateo)
+    calls = len(harness.sim.requests)
+
+    again = await runtime.absences(mateo, fresh=True)
+
+    assert again.status == "bypass"
+    assert len(harness.sim.requests) == calls + 2
+
+
 async def test_the_agenda_of_a_child_holds_only_the_days_asked_for(harness: Harness) -> None:
     runtime = harness.registry().get("marta")
     lucia = (await runtime.child("lucia")).value

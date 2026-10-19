@@ -78,6 +78,10 @@ TOUR: Final = (
         "the teachers a guardian can meet about one child",
     ),
     Suggestion(
+        "/v1/accounts/marta/children/mateo/absences",
+        "the absences and delays that the school recorded for one child",
+    ),
+    Suggestion(
         "/v1/accounts/marta/children/lucia/agenda",
         "the lessons and school events of one child for the coming week",
     ),

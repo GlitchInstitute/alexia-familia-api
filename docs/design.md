@@ -19,10 +19,10 @@ This page describes the whole design, and the code has not reached all of it. Ea
 | Part | State |
 | --- | --- |
 | The portal client, with login, session, breaker, allowlist, and politeness rules | Built |
-| Readers for the children, the tracking counters, the staff, the folders, the messages, the files, and the agenda | Built |
+| Readers for the children, the tracking counters, the staff, the folders, the messages, the files, the agenda, and the absences | Built |
 | The REST API for those readers, with keys, scopes, rate limits, problem documents, caching, and calendar files | Built |
 | The command line, the demo with a simulated school, the doctor, the Docker image, and CI | Built |
-| Readers for meetings, absences, forms, and contacts | Not built |
+| Readers for meetings, forms, and contacts | Not built |
 | Writes and the outbox | Not built. Every call in the allowlist reads, so the write settings change nothing yet |
 | Putting a message back to unread | Not built |
 
@@ -94,7 +94,7 @@ An account is one set of portal credentials. A server holds one or more accounts
 Resources nest the way the data does.
 
 - `/v1/accounts/{account}` is the account.
-- `/v1/accounts/{account}/children/{child}/...` holds what belongs to one child. Tracking, staff, and the agenda are built. Meetings and absences are planned.
+- `/v1/accounts/{account}/children/{child}/...` holds what belongs to one child. Tracking, staff, absences, and the agenda are built. Meetings are planned.
 - `/v1/accounts/{account}/messages` and `/folders` belong to the guardian, and so will `/contacts` and `/forms`. The portal keeps one inbox per login, not one per child.
 
 A `{child}` segment accepts the student id or a slug. The server derives the slug from the child's first name in lower case ASCII, adds `-2` on a collision, and lets the operator pin slugs in the configuration so URLs stay stable. A message names the children it concerns in free text. The server returns that text and the ids of the children whose names it contains.
@@ -226,6 +226,7 @@ The simulator and the parsers come from one author, so passing tests prove consi
 | Writes | Two-step outbox with a hash | One call with a dry-run flag | A hash binds the confirmation to the content, and the log survives a crash. |
 | Cache | Per account, short time-to-live, shared reads | None, long-lived mirror | Fresh enough for a dashboard, and kind to the portal. |
 | Message lists | One snapshot per folder, filtered in memory | Pass-through paging with live filters | Stable pages, any filter, and few portal calls. |
+| Per-child lists | Open the child's page, then read its feed, in one recipe under the account lock | Read the feed alone | The portal's own page makes both requests in that order, with the child in both. A shortcut would lean on behavior that nobody has checked. |
 | Error format | RFC 9457 problem documents | Custom JSON | Clients and tools already understand it. |
 | Calendar times | UTC moments and dates, with no zone rules | A `VTIMEZONE` with `TZID` on each time, floating local times | One independent reader cut the generated zone rules short and showed summer lessons an hour off. A UTC moment reads the same in every app. |
 | Session persistence | None | Sealed cookie files | A new login is cheap. The breaker file stops crash loops without storing a session. |

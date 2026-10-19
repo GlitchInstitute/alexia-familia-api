@@ -1173,6 +1173,182 @@
         }
       }
     },
+    "/v1/accounts/{account}/children/{child}/absences": {
+      "get": {
+        "tags": [
+          "absences"
+        ],
+        "summary": "List the absences of a child",
+        "description": "Needs the `read` scope. This is the list on the portal's page for justifying absences, newest day first. Most entries are absences. Some are other incidents, such as a late arrival, so read `incident` for what happened and `justifiable` to see whether the portal lets a guardian justify it. The portal decides which days the list covers. Its page filters by the current month, so older absences may be missing, and an empty list does not prove that a child has none. This server only reads the list. A guardian justifies an absence in the portal itself. No real list of incidents has been read while building this route, so a row that is worded in a way the server does not know fails with `portal_changed`.",
+        "operationId": "list_absences",
+        "security": [
+          {
+            "BearerKey": []
+          },
+          {
+            "HeaderKey": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "account",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "The account's name, as the operator wrote it in the settings.",
+              "title": "Account"
+            },
+            "description": "The account's name, as the operator wrote it in the settings."
+          },
+          {
+            "name": "child",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "A student id, or the child's slug as the list of children shows it. Letter case does not matter.",
+              "title": "Child"
+            },
+            "description": "A student id, or the child's slug as the list of children shows it. Letter case does not matter."
+          },
+          {
+            "name": "fresh",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Ignore the stored answer and ask the portal again. The server still paces its requests, so use this when you know something changed and not on a timer.",
+              "default": false,
+              "title": "Fresh"
+            },
+            "description": "Ignore the stored answer and ask the portal again. The server still paces its requests, so use this when you know something changed and not on a timer."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AbsenceList"
+                }
+              }
+            },
+            "headers": {
+              "X-Cache": {
+                "description": "`hit` when the answer was stored, `miss` when it was just read from the portal, `bypass` when `fresh=true` forced a new read.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "hit",
+                    "miss",
+                    "bypass"
+                  ]
+                }
+              },
+              "Age": {
+                "description": "How many seconds old the answer is.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad Gateway",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Gateway Timeout",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/accounts/{account}/children/{child}/agenda": {
       "get": {
         "tags": [
@@ -3023,6 +3199,150 @@
   },
   "components": {
     "schemas": {
+      "Absence": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "The portal's incident id."
+          },
+          "occurred_on": {
+            "type": "string",
+            "format": "date",
+            "title": "Occurred On",
+            "description": "The day of the incident, on the school's calendar."
+          },
+          "hour": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hour",
+            "description": "What the portal prints in its hour column, as text, for an incident that belongs to a time of the day. Null for an incident that covers the whole day."
+          },
+          "area": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Area",
+            "description": "The area or subject the portal files the incident under."
+          },
+          "teacher": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Teacher",
+            "description": "The teacher the portal names for the incident."
+          },
+          "incident": {
+            "type": "string",
+            "title": "Incident",
+            "description": "The portal's own words for what happened, in the school's language."
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note",
+            "description": "The note the school wrote about the incident."
+          },
+          "justifiable": {
+            "type": "boolean",
+            "title": "Justifiable",
+            "description": "False when the portal marks the incident as one that cannot be justified."
+          },
+          "justified": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Justified",
+            "description": "Whether the guardian has justified the incident. Null when the portal's cell is neither a yes nor a no."
+          },
+          "justification": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Justification",
+            "description": "The reason that was given when it was justified."
+          },
+          "accepted": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accepted",
+            "description": "Whether the school accepted the justification. Null when the portal's cell is neither a yes nor a no."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "occurred_on",
+          "hour",
+          "area",
+          "teacher",
+          "incident",
+          "note",
+          "justifiable",
+          "justified",
+          "justification",
+          "accepted"
+        ],
+        "title": "Absence",
+        "description": "One attendance incident of a child, such as a missed day or a late arrival.\n\nThe portal lists these on its page for justifying absences. Most are absences, and some are\nother incidents, so `incident` holds the portal's own words for what happened."
+      },
+      "AbsenceList": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/Absence"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "AbsenceList",
+        "description": "The attendance incidents the portal lists for one child, newest day first."
+      },
       "Account": {
         "properties": {
           "id": {
@@ -4418,6 +4738,10 @@
     {
       "name": "children",
       "description": "The children of an account and their school data."
+    },
+    {
+      "name": "absences",
+      "description": "The absences and other attendance incidents the portal lists for a child."
     },
     {
       "name": "agenda",

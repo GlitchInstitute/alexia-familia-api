@@ -9,6 +9,7 @@ from typing import Literal
 
 from pydantic import ConfigDict, Field
 
+from alexia_api.domain.absences import Absence
 from alexia_api.domain.accounts import Account
 from alexia_api.domain.agenda import AgendaEvent
 from alexia_api.domain.base import Model
@@ -52,6 +53,12 @@ class ChildList(Model):
 
 class StaffList(Model):
     items: tuple[StaffMember, ...]
+
+
+class AbsenceList(Model):
+    """The attendance incidents the portal lists for one child, newest day first."""
+
+    items: tuple[Absence, ...]
 
 
 class FolderList(Model):

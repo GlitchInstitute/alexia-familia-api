@@ -229,6 +229,9 @@ class CacheTtls(Model):
         ge=0,
         description="Seconds to reuse the agenda of a child or of the guardian for one range.",
     )
+    absences: float = Field(
+        default=600, ge=0, description="Seconds to reuse the absences the portal lists for a child."
+    )
 
 
 def _split_list(value: object) -> object:

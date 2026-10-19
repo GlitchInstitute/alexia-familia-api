@@ -42,6 +42,7 @@ Every path starts at `/ACWeb/` on the school's host. The `key` in the login addr
 | Message list | `/ACWeb/paginas/Comunicacion/Comunicados.aspx` | Seen |
 | One message | `/ACWeb/paginas/Comunicacion/Comunicado.aspx` | Seen |
 | File download | `/ACWeb/Controladores/ControladorRepositorio.ashx` | Seen |
+| Absences page and its grid feed | `/ACWeb/paginas/incidencias/Justificar.aspx` | Seen |
 | Script services | `/ACWeb/WS_Data/<Service>.asmx/<Method>` | Seen |
 
 The portal uses GUID strings for people, messages, and roles. A child has two of them, the student id and the person id, and they are different values. The student id feeds the tracking widget and the staff list. The person id feeds the agenda and the photo. The guardian has a person id as well. This project gives each kind its own type, so passing one where the other belongs fails type checking.
@@ -241,6 +242,46 @@ The portal serves the files of the message that the session has open. The client
 
 The client assumes that a failed download comes back as a web page with status 200. It refuses a page, a size that differs from the size the message lists, and anything over the limit. The check costs nothing when the assumption is wrong. Guessed.
 
+## Lists of one child
+
+The absences of a child come from a grid page, and the meetings come from another one. Both work in two steps, in the order the portal's own page makes them.
+
+1. Load the page with the child in the address, which for the absences is `Justificar.aspx?GuidObjeto=<student id>&ObjetoTipo=6&master=3&contexto_pagina=1`. The page makes the server remember which child is open.
+2. Load the same address with the grid's own parameters added. They are `jqGridID`, `_search=false`, `nd` with the time in milliseconds, `rows=500`, `page=1`, `sidx`, and `sord`. The request says that it is an `XMLHttpRequest` and takes the page's address as its referer. The answer is JSON that the portal labels as HTML. It holds `page`, `total`, `records`, and `rows`, and each row has an `id` and a list of `cell` values. A cell is a small piece of HTML.
+
+The client sends both requests in one recipe under the account lock, so no other request comes between them. A cell that holds only spaces or `&nbsp` is empty, and the portal leaves out the semicolon. Seen for the meetings page and for the absences page.
+
+### Absences
+
+The page is `/ACWeb/paginas/incidencias/Justificar.aspx`. Its grid is `ctl00_ctl00_ContenidoPagina_ContenidoPagina_CmptIncidencias_gridJustificar`, and it sorts by `Fecha`, newest first. Seen.
+
+The page lists the days from the first day of the current month to today, and it leaves the box "Pendientes de justificar" unticked. An empty list therefore says only that nothing is recorded in that window. The API repeats this limit in the description of the route. Seen.
+
+Each row has 14 cells. The recording had no rows, so the cell formats come from the page's script and not from a real list. Read.
+
+| Cell | Holds | Field of the API |
+| --- | --- | --- |
+| 0 | The id, which has to equal the id of the row | `id` |
+| 1 | An image that marks an incident that cannot be justified | `justifiable`, false when the image is there |
+| 2 | The date as `dd/mm/yyyy` | `occurred_on` |
+| 3 | A value | Not read |
+| 4 | The month | Not read |
+| 5 | The hour | `hour` |
+| 6 | The student | Not read |
+| 7 | The area | `area` |
+| 8 | The teacher | `teacher` |
+| 9 | The incident, such as a missed day or a late arrival | `incident` |
+| 10 | A note | `note` |
+| 11 | Whether the incident was justified | `justified` |
+| 12 | The reason that was given | `justification` |
+| 13 | A box that says whether the school accepted the reason | `accepted` |
+
+A flag cell is true when it holds a ticked box, `True`, `Sí`, or `1`. It is false when it holds an unticked box, `False`, `No`, or `0`. Any other text makes the flag unknown, and the API shows it as `null`. Guessed.
+
+A row with another count of cells, a date that the reader cannot read, or a first cell that differs from the id of the row is `portal_changed`.
+
+The page's justify action calls `WSComunicados.RecuperarRutaComunicadoJustificar` and then moves the whole window to a route that belongs to the session. A plain call cannot follow it, so the server reads the list and leaves the justification to the portal. Read.
+
 ## The tracking widget and the staff list
 
 `GetWPSeguimiento` answers five HTML fragments. Each holds its count in an `<em>N</em>`. The recording had every counter at zero, so the markup for a count above zero is Read. A fragment with no `<em>` number is `portal_changed`.
@@ -255,6 +296,7 @@ The client assumes that a failed download comes back as a web page with status 2
 - A login with several roles, the multifactor step, and each screen in the table above.
 - The wording of a maintenance page.
 - A counter above zero in the tracking widget and in the agenda.
+- A row of the absences grid. The cell formats come from the page's script, and the recording had no rows.
 - What the school-year rollover looks like, both in the screens it may add to the login and in the agenda.
 - What a real wrong password does to a real account. The design assumes that it can lock it.
 
@@ -263,7 +305,7 @@ The client assumes that a failed download comes back as a web page with status 2
 These calls are not in the allowlist, so the server cannot send them. The notes are for whoever builds the next reader.
 
 - Meetings. `WSReuniones.GetFechasDisponibles` with `guidEmpleado`, `mes`, and `anyo` answers `{horarios: ["YYYY,M,D", ...]}` with no padding, or `{}` when nothing is free. It lists one entry for each free hour, so a day with three free hours appears three times. `GetHorasByFecha` with `guidEmpleado` and `fecha` answers `{horas: ["HH:MM-HH:MM", ...]}`. The date has to be ISO text, because the `/Date(ms)/` text that the page's own proxy sends is accepted and finds no hours. The interviews list is a grid with 12 cells a row. Seen.
-- Absences. The absence page has a grid with 14 cells a row. The recording had no rows, so the cell formats are Read. The page's justify action moves the whole window to a route that belongs to the session, so a plain call cannot follow it.
+- Justifying an absence. The page's justify action moves the whole window to a route that belongs to the session, so a plain call cannot follow it. The page also has a popup that announces an absence, and that is a write. Read.
 - Forms and authorizations. The list is the message grid with `autorizaciones=1` on the page. The recording had no forms, so the shape of one is not known.
 - Writes. Meeting requests, replies, new messages, and absence announcements all have calls in the portal's scripts. None has run on a real portal. Read.
 

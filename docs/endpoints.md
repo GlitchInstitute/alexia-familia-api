@@ -27,6 +27,7 @@ Every route lives at the address of your server, for example `http://127.0.0.1:8
 | GET | `/v1/accounts/{account}/children/{child}` | [Show one child](#show-one-child) |
 | GET | `/v1/accounts/{account}/children/{child}/tracking` | [Show the tracking counters of a child](#show-the-tracking-counters-of-a-child) |
 | GET | `/v1/accounts/{account}/children/{child}/staff` | [List the staff a guardian can meet about a child](#list-the-staff-a-guardian-can-meet-about-a-child) |
+| GET | `/v1/accounts/{account}/children/{child}/absences` | [List the absences of a child](#list-the-absences-of-a-child) |
 | GET | `/v1/accounts/{account}/children/{child}/agenda` | [Show the agenda of a child](#show-the-agenda-of-a-child) |
 | GET | `/v1/accounts/{account}/guardian/agenda` | [Show the agenda of the guardian](#show-the-agenda-of-the-guardian) |
 | GET | `/v1/accounts/{account}/children/{child}/agenda.ics` | [Subscribe to the calendar of a child](#subscribe-to-the-calendar-of-a-child) |
@@ -280,6 +281,44 @@ Needs the `read` scope. These are the teachers and other staff the portal offers
 **Answers**
 
 - `200` returns [StaffList](#stafflist) as `application/json`.
+
+The `200` answer carries these headers.
+
+| Header | What it says |
+| --- | --- |
+| `X-Cache` | `hit` when the answer was stored, `miss` when it was just read from the portal, `bypass` when `fresh=true` forced a new read. |
+| `Age` | How many seconds old the answer is. |
+
+A failure answers `401`, `403`, `404`, `422`, `429`, `500`, `502`, `503`, or `504` with a [Problem](#problem) as `application/problem+json`. The [errors page](errors.md) lists every `code`.
+
+## Routes for absences
+
+The absences and other attendance incidents the portal lists for a child.
+
+### List the absences of a child
+
+`GET /v1/accounts/{account}/children/{child}/absences`
+
+Needs the `read` scope. This is the list on the portal's page for justifying absences, newest day first. Most entries are absences. Some are other incidents, such as a late arrival, so read `incident` for what happened and `justifiable` to see whether the portal lets a guardian justify it. The portal decides which days the list covers. Its page filters by the current month, so older absences may be missing, and an empty list does not prove that a child has none. This server only reads the list. A guardian justifies an absence in the portal itself. No real list of incidents has been read while building this route, so a row that is worded in a way the server does not know fails with `portal_changed`.
+
+**Key.** Send one as `Authorization: Bearer <key>` or `X-API-Key: <key>`.
+
+**Path parameters**
+
+| Name | Kind | What it is |
+| --- | --- | --- |
+| `account` | text | The account's name, as the operator wrote it in the settings. |
+| `child` | text | A student id, or the child's slug as the list of children shows it. Letter case does not matter. |
+
+**Query parameters**
+
+| Name | Kind | Default | What it does |
+| --- | --- | --- | --- |
+| `fresh` | true or false | `false` | Ignore the stored answer and ask the portal again. The server still paces its requests, so use this when you know something changed and not on a timer. |
+
+**Answers**
+
+- `200` returns [AbsenceList](#absencelist) as `application/json`.
 
 The `200` answer carries these headers.
 
@@ -617,6 +656,35 @@ The `200` answer carries these headers.
 A failure answers `401`, `403`, `404`, `413`, `422`, `429`, `500`, `502`, `503`, or `504` with a [Problem](#problem) as `application/problem+json`. The [errors page](errors.md) lists every `code`.
 
 ## Models
+
+### Absence
+
+One attendance incident of a child, such as a missed day or a late arrival.
+
+The portal lists these on its page for justifying absences. Most are absences, and some are
+other incidents, so `incident` holds the portal's own words for what happened.
+
+| Field | Kind | What it says |
+| --- | --- | --- |
+| `id` | text | The portal's incident id. |
+| `occurred_on` | date, written `YYYY-MM-DD` | The day of the incident, on the school's calendar. |
+| `hour` | text or null | What the portal prints in its hour column, as text, for an incident that belongs to a time of the day. Null for an incident that covers the whole day. |
+| `area` | text or null | The area or subject the portal files the incident under. |
+| `teacher` | text or null | The teacher the portal names for the incident. |
+| `incident` | text | The portal's own words for what happened, in the school's language. |
+| `note` | text or null | The note the school wrote about the incident. |
+| `justifiable` | true or false | False when the portal marks the incident as one that cannot be justified. |
+| `justified` | true or false or null | Whether the guardian has justified the incident. Null when the portal's cell is neither a yes nor a no. |
+| `justification` | text or null | The reason that was given when it was justified. |
+| `accepted` | true or false or null | Whether the school accepted the justification. Null when the portal's cell is neither a yes nor a no. |
+
+### AbsenceList
+
+The attendance incidents the portal lists for one child, newest day first.
+
+| Field | Kind | What it says |
+| --- | --- | --- |
+| `items` | list of [Absence](#absence) |  |
 
 ### Account
 

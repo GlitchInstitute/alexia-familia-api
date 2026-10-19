@@ -90,6 +90,9 @@
 # least 0.
 # agenda = 600
 
+# Seconds to reuse the absences the portal lists for a child. It must be at least 0.
+# absences = 600
+
 # One block for each portal login. The name after "accounts." goes into URLs, so use lower
 # case letters, digits, and hyphens. One login lists all of a parent's children, so a
 # parent with two children needs a single block. Add another block for another parent's
