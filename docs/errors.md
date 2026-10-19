@@ -143,7 +143,7 @@ From a source checkout, put `pixi run` in front of each command. A running serve
 A key with the `admin` scope can do the same with a request.
 
 ```bash
-curl -X POST -H "Authorization: Bearer YOUR_ADMIN_KEY" \
+curl -X POST -H "Authorization: Bearer YOUR_KEY" \
   "http://127.0.0.1:8000/v1/accounts/marta/connection/reset"
 ```
 

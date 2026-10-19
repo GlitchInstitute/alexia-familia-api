@@ -124,7 +124,7 @@ pixi pins every package in `pixi.lock`. Dependabot updates the GitHub Actions an
 4. Run `pixi run -e dev check`.
 5. Fill in the pull request form. Link the issue.
 
-CI runs the same checks on Linux with Python 3.12, 3.13, and 3.14, scans the history for secrets, builds the package, and builds and smoke tests the Docker image.
+CI runs the same checks on Linux with Python 3.12, 3.13, and 3.14, scans the history for secrets, builds the package, and builds and smoke tests the Docker image. The secret scan is gitleaks, and `.gitleaks.toml` lets it pass a placeholder such as `YOUR_KEY` in the docs. A real key in a commit still fails it.
 
 ## Make a release
 

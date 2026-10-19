@@ -1,0 +1,9 @@
+title = "alexia-familia-api"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "The docs write a placeholder such as YOUR_KEY where a reader puts an API key."
+regexTarget = "match"
+regexes = ['''YOUR_[A-Z_]*KEY''']
