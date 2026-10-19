@@ -187,7 +187,7 @@ The feed has quirks that the reader hides.
 
 The client serves two of the folders, `IdCarpetaRecibidos` for received and `IdCarpetaEnviados` for sent. The tree also lists drafts and personal folders, and the client leaves them out. Selecting the drafts folder with `CarpetaSeleccionada` answers HTTP 500, so a draft cannot be listed with this call. Seen.
 
-`CarpetaSeleccionada` is session state. Reading sent messages and then received messages needs a second call, and the reader selects the folder before every read.
+`CarpetaSeleccionada` is session state. Reading sent messages and then received messages needs a second call, and the reader selects the folder before it reads a list, a message, or a file.
 
 ### The list
 
@@ -219,10 +219,11 @@ An empty cell holds `&nbsp` with no semicolon, and the client treats it as empty
 
 ### One message
 
-Opening a message takes two requests. Seen.
+Reading a message takes three requests, and the lock of the account is held for all three.
 
-1. Load `Comunicado.aspx?GuidComunicadoOrigen=<id>&TipoComunicado=N&AccionComunicado=1&DestsInicialesCom=&TxtDefaultCom=&AccionExtraCom=`. The page is large and the client does not read it. Loading it makes the server remember the message.
-2. Call `GetDatosPaginaComunicado` with `{}`.
+1. Call `CarpetaSeleccionada` for the folder of the message. The one recorded read of a sent message ran with the sent folder shown, and an earlier call of the session may have left the other folder shown. Nobody has seen what the portal does with a message that is not of the folder it shows, so the reader does not leave it to chance. Seen as a call, and Guessed to matter.
+2. Load `Comunicado.aspx?GuidComunicadoOrigen=<id>&TipoComunicado=N&AccionComunicado=1&DestsInicialesCom=&TxtDefaultCom=&AccionExtraCom=`. The page is large and the client does not read it. Loading it makes the server remember the message. Seen.
+3. Call `GetDatosPaginaComunicado` with `{}`. Seen.
 
 The data has no message id, because the server remembers which page was opened. A page can show another message than the one asked for if something else moved the session. The reader checks the publication date, the subject, and the sender against the list row, and refuses the page when they differ. Serving it would put one message's words under another message's id.
 
@@ -244,7 +245,7 @@ The text is HTML as the school typed it in a rich text editor, so none of it is 
 
 A file comes from `ControladorRepositorio.ashx?tipo=6&nombre=<file id>&alias=<file name>`. The portal serves it as `application/octet-stream`, so the client finds the media type from the first bytes of the file. Seen.
 
-The portal serves the files of the message that the session has open. The client therefore opens the message again, reads its page again, and finds the file in the list before any bytes move. A file the school took away or replaced is found out at that point.
+The portal serves the files of the message that the session has open. The client therefore shows the folder of the message, opens the message again, reads its page again, and finds the file in the list before any bytes move. A file the school took away or replaced is found out at that point.
 
 The client assumes that a failed download comes back as a web page with status 200. It refuses a page, a size that differs from the size the message lists, and anything over the limit. The check costs nothing when the assumption is wrong. Guessed.
 
@@ -273,7 +274,7 @@ A read that fails or is cancelled between the first request and the last cannot 
 
 The reader gives the rows to the parser of the message grid, so a row with another count of cells is `portal_changed` and the part names the row. A form keeps the id, the sender, the subject, the date, the expiry, and the category of its row. The read icon and the other cells are ignored.
 
-One form opens as one message does. The reader loads `Comunicado.aspx` with the id of the form, calls `GetDatosPaginaComunicado`, and checks the page against the list row. It reads the time of sending, the text, and the names of the children. It reads no question, no answer, and no file. The page opens with the list on the messages, so reading a form does not switch the list. If the real portal opens a form on another page, the check against the row fails with `unexpected_reply`, and the reader never serves the words of another message under the id of a form.
+One form opens as one message does. The reader shows the received folder, loads `Comunicado.aspx` with the id of the form, calls `GetDatosPaginaComunicado`, and checks the page against the list row. It reads the time of sending, the text, and the names of the children. It reads no question, no answer, and no file. The page opens with the list on the messages, so reading a form does not switch the list. If the real portal opens a form on another page, the check against the row fails with `unexpected_reply`, and the reader never serves the words of another message under the id of a form.
 
 ## Lists of one child
 

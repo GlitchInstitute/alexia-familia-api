@@ -309,7 +309,7 @@ class AccountRuntime:
         content = await self._message_cache.get(
             ("message", row.id),
             self._ttls.message,
-            lambda: self._gateway.call(lambda tx: read_message(tx, row)),
+            lambda: self._gateway.call(lambda tx: read_message(tx, folder, row)),
             fresh=fresh,
         )
         return combine(Message.of(row, content.value), listing, content)
@@ -361,7 +361,7 @@ class AccountRuntime:
         except InvalidIdError:
             raise NotFoundError("attachment", attachment) from None
         download = await self._gateway.call(
-            lambda tx: download_attachment(tx, row, token, self._max_attachment_bytes)
+            lambda tx: download_attachment(tx, folder, row, token, self._max_attachment_bytes)
         )
         if download is None:
             raise NotFoundError("attachment", attachment)

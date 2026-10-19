@@ -119,10 +119,11 @@ async def read_forms(
 async def read_form(tx: Tx, summary: FormSummary) -> FormContent:
     """Read the words of one form from the page that opens it.
 
-    The page is opened with the list on messages, as it is for a message. The portal may mark
-    the form read when its page opens. Whether it does is not known.
+    The page is opened with the list on messages, as it is for a message, and with the received
+    folder shown. The portal may mark the form read when its page opens. Whether it does is not
+    known.
     """
-    reply = await read_reply(tx, summary)
+    reply = await read_reply(tx, "received", summary)
     rendered = await asyncio.to_thread(render_body, reply.text_1)
     return FormContent(
         sent_at=sent_at_of(reply, tx.zone),

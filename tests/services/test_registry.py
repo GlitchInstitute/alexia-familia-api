@@ -818,6 +818,17 @@ async def test_a_message_the_family_sent_is_read_from_the_sent_folder(harness: H
     assert found.value.body.text.startswith("Ausencia de Lucía.")
 
 
+async def test_a_message_is_read_with_the_folder_it_belongs_to_shown(harness: Harness) -> None:
+    runtime = harness.registry().get("marta")
+
+    await runtime.message("sent", synthetic_guid(0x2001))
+    after_the_sent_one = [session.folder for session in harness.sim.sessions.values()]
+    await runtime.message("received", UNREAD)
+    after_the_received_one = [session.folder for session in harness.sim.sessions.values()]
+
+    assert (after_the_sent_one, after_the_received_one) == (["sent"], ["received"])
+
+
 async def test_a_message_is_stored_after_it_is_read_and_read_again_when_its_time_is_up(
     harness: Harness, clock: ManualClock
 ) -> None:

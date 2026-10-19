@@ -15,6 +15,7 @@ from alexia_api.domain.errors import AttachmentTooLarge, UnexpectedReply
 from alexia_api.domain.ids import attachment_token
 from alexia_api.domain.media import MEBIBYTE, OCTET_STREAM, Download
 from alexia_api.portal.attachments import REPOSITORY_PATH, attachment_path, download_attachment
+from alexia_api.portal.folders import select_folder
 from alexia_api.portal.gateway import Gateway
 from alexia_api.portal.session import Gates, PortalRequest, PortalResponse, Tx
 from alexia_api.sim.mail import SimFile, SimMessage
@@ -39,7 +40,7 @@ async def fetch(
 ) -> Download | None:
     row = await listed_row(gateway, number)
     token = attachment_token(file.id)
-    return await gateway.call(lambda tx: download_attachment(tx, row, token, limit))
+    return await gateway.call(lambda tx: download_attachment(tx, "received", row, token, limit))
 
 
 class Doctored:
@@ -77,7 +78,7 @@ async def fetch_doctored(
     row = await listed_row(gateway, 0x1002)
     token = attachment_token(file.id)
     return await gateway.call(
-        lambda tx: download_attachment(Doctored(tx, change), row, token, LIMIT)
+        lambda tx: download_attachment(Doctored(tx, change), "received", row, token, LIMIT)
     )
 
 
@@ -141,10 +142,47 @@ async def test_the_message_is_opened_and_read_again_just_before_the_file_is_fetc
     token = attachment_token(file.id)
     before = len(harness.sim.requests)
 
-    await gateway.call(lambda tx: download_attachment(tx, row, token, LIMIT))
+    await gateway.call(lambda tx: download_attachment(tx, "received", row, token, LIMIT))
 
     sent = [request.path.rsplit("/", 1)[-1] for request in harness.sim.requests[before:]]
-    assert sent == ["Comunicado.aspx", "GetDatosPaginaComunicado", "ControladorRepositorio.ashx"]
+    assert sent == [
+        "CarpetaSeleccionada",
+        "Comunicado.aspx",
+        "GetDatosPaginaComunicado",
+        "ControladorRepositorio.ashx",
+    ]
+
+
+async def test_the_folder_of_the_message_is_shown_before_its_file_is_fetched(
+    harness: Harness,
+) -> None:
+    (file,) = seeded(0x1002).files
+    gateway = harness.gateway()
+    row = await listed_row(gateway, 0x1002)
+    token = attachment_token(file.id)
+    await gateway.call(lambda tx: select_folder(tx, "sent"))
+
+    await gateway.call(lambda tx: download_attachment(tx, "received", row, token, LIMIT))
+
+    assert [session.folder for session in harness.sim.sessions.values()] == ["received"]
+
+
+async def test_the_file_of_a_sent_message_is_fetched_with_the_sent_folder_shown(
+    harness: Harness,
+) -> None:
+    file = a_file("lista.pdf", b"%PDF-1.4\n%%EOF\n")
+    harness.deliver(
+        DEMO_USER_A, replace(seeded(0x2001), guid=synthetic_guid(0x2003), files=(file,))
+    )
+    gateway = harness.gateway()
+    row = await listed_row(gateway, 0x2003, "sent")
+    token = attachment_token(file.id)
+    await gateway.call(lambda tx: select_folder(tx, "received"))
+
+    download = await gateway.call(lambda tx: download_attachment(tx, "sent", row, token, LIMIT))
+
+    assert download is not None
+    assert [session.folder for session in harness.sim.sessions.values()] == ["sent"]
 
 
 async def test_a_file_the_message_does_not_list_is_never_asked_for(harness: Harness) -> None:
@@ -166,7 +204,7 @@ async def test_a_file_the_school_took_away_since_the_list_was_read_is_not_asked_
     harness.revise(DEMO_USER_A, synthetic_guid(0x1302), files=())
     token = attachment_token(file.id)
 
-    download = await gateway.call(lambda tx: download_attachment(tx, row, token, LIMIT))
+    download = await gateway.call(lambda tx: download_attachment(tx, "received", row, token, LIMIT))
 
     assert download is None
     assert harness.sim.counters.downloads == 0
@@ -181,7 +219,7 @@ async def test_a_file_the_school_replaced_arrives_as_it_is_now(harness: Harness)
     harness.revise(DEMO_USER_A, synthetic_guid(0x1303), files=(new,))
     token = attachment_token(old.id)
 
-    download = await gateway.call(lambda tx: download_attachment(tx, row, token, LIMIT))
+    download = await gateway.call(lambda tx: download_attachment(tx, "received", row, token, LIMIT))
 
     assert download is not None
     assert download.data == new.data

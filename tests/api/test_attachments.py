@@ -69,6 +69,30 @@ async def test_a_file_is_fetched_from_the_portal_every_time_and_never_stored(api
     assert "age" not in first.headers
 
 
+async def test_a_file_is_fetched_with_the_folder_of_its_message_shown(api: Api) -> None:
+    (file,) = seeded(0x1002).files
+    await api.get(MESSAGES)
+    await api.get(f"{MESSAGES}?folder=sent")
+
+    response = await api.get(address_of(file))
+
+    assert response.content == file.data
+    assert [session.folder for session in api.harness.sim.sessions.values()] == ["received"]
+
+
+async def test_the_file_of_a_sent_message_is_fetched_with_the_sent_folder_shown(api: Api) -> None:
+    file = SimFile(id=f"{synthetic_guid(0xB01)}/2003", name="lista.pdf", data=b"%PDF-1.4\n%%EOF\n")
+    message = replace(seeded(0x2001), guid=synthetic_guid(0x2003), files=(file,))
+    api.harness.deliver(DEMO_USER_A, message)
+    await api.get(f"{MESSAGES}?folder=sent")
+    await api.get(MESSAGES)
+
+    response = await api.get(f"{address_of(file, message.guid)}?folder=sent")
+
+    assert response.content == file.data
+    assert [session.folder for session in api.harness.sim.sessions.values()] == ["sent"]
+
+
 @pytest.mark.parametrize(
     ("name", "data"),
     [

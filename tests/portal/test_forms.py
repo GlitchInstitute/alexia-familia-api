@@ -11,6 +11,7 @@ import pytest
 from alexia_api.domain.errors import PortalError, SchemaDrift, Transport, UnexpectedReply
 from alexia_api.domain.forms import FormContent, FormSummary
 from alexia_api.domain.ids import parse_form_id
+from alexia_api.portal.folders import select_folder
 from alexia_api.portal.forms import FORMS_PAGE, FormFeed, lists_forms, read_form, read_forms
 from alexia_api.portal.gateway import Gateway
 from alexia_api.portal.inbox import Feed, read_feed
@@ -383,6 +384,16 @@ async def test_reading_a_form_does_not_switch_the_list(harness: Harness) -> None
     assert all(
         request.query != "autorizaciones=1" for request in harness.sim.requests[asked_before:]
     )
+
+
+async def test_a_form_is_read_with_the_received_folder_shown(harness: Harness) -> None:
+    gateway = harness.gateway()
+    row = (await gateway.call(read_forms)).forms[0]
+    await gateway.call(lambda tx: select_folder(tx, "sent"))
+
+    await gateway.call(lambda tx: read_form(tx, row))
+
+    assert [session.folder for session in harness.sim.sessions.values()] == ["received"]
 
 
 async def test_a_page_that_is_not_the_form_of_the_row_is_refused(

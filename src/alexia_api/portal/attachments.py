@@ -6,7 +6,7 @@ from urllib.parse import quote
 from alexia_api.domain.errors import AttachmentTooLarge, PortalError, UnexpectedReply
 from alexia_api.domain.ids import AttachmentId, portal_file_id
 from alexia_api.domain.media import Download, sniff_media_type
-from alexia_api.domain.messages import MessageSummary
+from alexia_api.domain.messages import FolderName, MessageSummary
 from alexia_api.portal.message import message_path, read_reply
 from alexia_api.portal.pages import PageRequest, get_page
 from alexia_api.portal.session import Tx
@@ -31,9 +31,9 @@ def attachment_path(file_id: str, name: str) -> str:
 
 
 async def download_attachment(
-    tx: Tx, summary: MessageSummary, token: AttachmentId, limit: int
+    tx: Tx, folder: FolderName, summary: MessageSummary, token: AttachmentId, limit: int
 ) -> Download | None:
-    """Fetch one file of a message, or None when the message does not list it any more.
+    """Fetch one file of a message of a folder, or None when the message does not list it any more.
 
     The portal serves the files of the message that the session has open, so the message is opened
     again and its page is read again. That also shows the files as they are now, and a file the
@@ -41,7 +41,7 @@ async def download_attachment(
     download with a web page and a status of 200, so a page, a size that differs from the list,
     and a file over the limit are all refused.
     """
-    reply = await read_reply(tx, summary)
+    reply = await read_reply(tx, folder, summary)
     wanted = portal_file_id(token)
     file = next((item for item in reply.files if item.id == wanted), None)
     if file is None:

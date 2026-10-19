@@ -7,11 +7,18 @@ from zoneinfo import ZoneInfo
 
 from alexia_api.domain.errors import PortalError, SchemaDrift, UnexpectedReply, sample_of
 from alexia_api.domain.ids import FormId, MessageId, attachment_token
-from alexia_api.domain.messages import Attachment, MessageContent, MessageSummary, Translation
+from alexia_api.domain.messages import (
+    Attachment,
+    FolderName,
+    MessageContent,
+    MessageSummary,
+    Translation,
+)
 from alexia_api.domain.time import instant_of, wall_of
 from alexia_api.portal import wire
 from alexia_api.portal.allowlist import GET_MESSAGE_DATA
 from alexia_api.portal.body import Rendered, render_body
+from alexia_api.portal.folders import select_folder
 from alexia_api.portal.pages import (
     COMUNICADO_PAGE,
     COMUNICADOS_PAGE,
@@ -133,11 +140,16 @@ def _render(reply: wire.MessageReply) -> tuple[Rendered, tuple[Translation, ...]
     return render_body(reply.text_1), _translations(reply)
 
 
-async def read_reply(tx: Tx, listed: Listed) -> wire.MessageReply:
+async def read_reply(tx: Tx, folder: FolderName, listed: Listed) -> wire.MessageReply:
     """Open a message, ask its page for the data, and check the page is the message of the row.
+
+    The folder is shown first, because an earlier call of the session may have left the other one
+    and the one recorded read of a sent message ran with the sent folder shown. Nobody has seen
+    what the portal does with a message that is not of the folder it shows.
 
     The portal may mark the message read when its page opens. Whether it does is not known.
     """
+    await select_folder(tx, folder)
     await open_message(tx, listed.id)
     reply = await call_ws(
         tx, GET_MESSAGE_DATA, wire.EmptyParams(), referer=tx.absolute(message_path(listed.id))
@@ -146,9 +158,9 @@ async def read_reply(tx: Tx, listed: Listed) -> wire.MessageReply:
     return reply
 
 
-async def read_message(tx: Tx, summary: MessageSummary) -> MessageContent:
-    """Read the words, the files and the facts of one message."""
-    reply = await read_reply(tx, summary)
+async def read_message(tx: Tx, folder: FolderName, summary: MessageSummary) -> MessageContent:
+    """Read the words, the files and the facts of one message of a folder."""
+    reply = await read_reply(tx, folder, summary)
     # A large body takes a second of CPU to clean. A thread keeps the other accounts moving.
     main, translations = await asyncio.to_thread(_render, reply)
     return MessageContent(
