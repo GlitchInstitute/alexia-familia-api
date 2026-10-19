@@ -5,9 +5,10 @@ Every failure that reaches a client has the same shape and a stable `code`. A cl
 words reach `detail` only where `describe` puts them, and the sample of a reply that changed
 shape never leaves the server.
 
-The status says who has to act. A 4xx status means the caller can fix the request. A 503 means
-this account cannot be used until the operator acts, for example after a wrong password. A 502 or
-504 means the portal misbehaved or did not answer.
+The status says who has to act. A 4xx status means the caller can fix the request. A 413 on a
+file means the file is larger than the operator lets this server carry. A 503 means this account
+cannot be used until the operator acts, for example after a wrong password. A 502 or 504 means
+the portal misbehaved or did not answer.
 """
 
 import logging
@@ -26,6 +27,7 @@ from alexia_api.api.middleware import protective_headers
 from alexia_api.domain.base import Model
 from alexia_api.domain.errors import (
     ActionRequiredInPortal,
+    AttachmentTooLarge,
     BreakerCause,
     BreakerOpen,
     ComposeMismatch,
@@ -192,6 +194,8 @@ def map_portal_error(detail: PortalErrorDetail) -> Mapped:
             return Mapped(HTTPStatus.GATEWAY_TIMEOUT)
         case Transport():
             return Mapped(HTTPStatus.BAD_GATEWAY)
+        case AttachmentTooLarge():
+            return Mapped(PAYLOAD_TOO_LARGE)
         case (
             TokenInvalid()
             | PortalFault()
@@ -269,6 +273,12 @@ async def _not_found(request: Request, error: NotFoundError) -> Response:
             detail = (
                 f"no message '{reference}' in this folder, use an id from the list of messages of "
                 "the same folder, and ask for that list with fresh=true if the message arrived "
+                "lately"
+            )
+        case "attachment":
+            detail = (
+                f"no file '{reference}' on this message, use an id from the attachments of the "
+                "message, and read the message with fresh=true if the school changed its files "
                 "lately"
             )
         case _:

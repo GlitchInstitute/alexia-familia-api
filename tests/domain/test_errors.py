@@ -8,6 +8,7 @@ from alexia_api.domain.errors import (
     BREAKER_CAUSE_TEXT,
     MAX_DRIFT_SAMPLE_CHARS,
     ActionRequiredInPortal,
+    AttachmentTooLarge,
     BreakerCause,
     BreakerOpen,
     ComposeMismatch,
@@ -51,6 +52,7 @@ EXAMPLES: list[PortalErrorDetail] = [
     UnexpectedReply(where="login"),
     SchemaDrift(where="inbox row", sample="<html></html>"),
     Transport(reason="timeout"),
+    AttachmentTooLarge(limit=25 * 1024 * 1024),
     Denied(call="WSComunicados.Enviar", reason="writes_disabled"),
     ComposeRejected(call="WSComunicados.Enviar", portal_text="No se pudo enviar", portal_code=None),
     ComposeMismatch(where="subject"),
@@ -114,6 +116,14 @@ def test_a_denial_names_the_switch_that_allows_it() -> None:
     assert "ALEXIA_API_ALLOW_FORMS" in forms
     assert "ALEXIA_API_RESTORE_UNREAD" in unread
     assert "never_call" in other
+
+
+def test_a_file_that_is_too_large_names_the_limit_and_the_setting_that_raises_it() -> None:
+    text = describe(AttachmentTooLarge(limit=40 * 1024 * 1024))
+
+    assert "40 MiB" in text
+    assert "ALEXIA_API_MAX_ATTACHMENT_MIB" in text
+    assert "portal" in text
 
 
 def test_every_breaker_cause_has_a_plain_description() -> None:

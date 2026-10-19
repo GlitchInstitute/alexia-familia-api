@@ -20,11 +20,14 @@ from alexia_api.domain.ids import (
     InvalidIdError,
     StudentId,
     parse_account_id,
+    parse_attachment_id,
     parse_message_id,
     parse_role_id,
 )
-from alexia_api.domain.messages import Folder, FolderName, Message
+from alexia_api.domain.media import Download
+from alexia_api.domain.messages import Folder, FolderName, Message, MessageSummary
 from alexia_api.domain.security import Principal
+from alexia_api.portal.attachments import download_attachment
 from alexia_api.portal.breaker import BREAKER_DIRECTORY, BreakerStore
 from alexia_api.portal.children import read_home
 from alexia_api.portal.folders import read_folder_tree
@@ -66,6 +69,7 @@ class AccountRuntime:
         message_cache: TtlCache,
         ttls: CacheTtls,
         capabilities: Capabilities,
+        max_attachment_bytes: int,
     ) -> None:
         self.account = account
         self.label = settings.label or account
@@ -76,6 +80,7 @@ class AccountRuntime:
         self._message_cache = message_cache
         self._ttls = ttls
         self._capabilities = capabilities
+        self._max_attachment_bytes = max_attachment_bytes
 
     async def status(self) -> Account:
         """Describe the account without calling the portal."""
@@ -144,16 +149,14 @@ class AccountRuntime:
             fresh=fresh,
         )
 
-    async def message(
-        self, folder: FolderName, reference: str, *, fresh: bool = False
-    ) -> Cached[Message]:
-        """One message of a folder, with its words.
+    async def _listed(
+        self, folder: FolderName, reference: str, *, fresh: bool
+    ) -> tuple[MessageSummary, Cached[Feed]]:
+        """The row of a message in the stored list of its folder, with that list.
 
-        The message is found in the stored list of its folder. A reference that is no message id,
-        or that the portal did not list for this login, is therefore not found without a request
-        to the portal. A client that expects a message that arrived lately reads with `fresh`.
-        The row comes from the list as it is now and the words come from a store of their own, so
-        `read` agrees with the list even when the words are older.
+        A reference that is no message id, or that the portal did not list for this login, is not
+        found without a request to the portal. A client that expects a message that arrived lately
+        reads with `fresh`.
         """
         try:
             wanted = parse_message_id(reference)
@@ -163,6 +166,17 @@ class AccountRuntime:
         row = next((summary for summary in listing.value.messages if summary.id == wanted), None)
         if row is None:
             raise NotFoundError("message", reference)
+        return row, listing
+
+    async def message(
+        self, folder: FolderName, reference: str, *, fresh: bool = False
+    ) -> Cached[Message]:
+        """One message of a folder, with its words.
+
+        The row comes from the list as it is now and the words come from a store of their own, so
+        `read` agrees with the list even when the words are older.
+        """
+        row, listing = await self._listed(folder, reference, fresh=fresh)
         content = await self._message_cache.get(
             ("message", row.id),
             self._ttls.message,
@@ -170,6 +184,27 @@ class AccountRuntime:
             fresh=fresh,
         )
         return combine(Message.of(row, content.value), listing, content)
+
+    async def attachment(
+        self, folder: FolderName, reference: str, attachment: str, *, fresh: bool = False
+    ) -> Download:
+        """One file of a message, fetched from the portal every time and never stored.
+
+        A message or a token that cannot name anything is not found without a request to the
+        portal. A token the message does not list is found out from the live page. `fresh` only
+        makes the list that holds the message be read again, because the file is always live.
+        """
+        row, _ = await self._listed(folder, reference, fresh=fresh)
+        try:
+            token = parse_attachment_id(attachment)
+        except InvalidIdError:
+            raise NotFoundError("attachment", attachment) from None
+        download = await self._gateway.call(
+            lambda tx: download_attachment(tx, row, token, self._max_attachment_bytes)
+        )
+        if download is None:
+            raise NotFoundError("attachment", attachment)
+        return download
 
     async def check(self, *, fresh: bool = False) -> CheckResult:
         """Make sure a session works, logging in if needed. This is the one call that logs in."""
@@ -245,6 +280,7 @@ class Registry:
                     message_cache=TtlCache(clock, max_entries=MAX_CACHED_MESSAGES),
                     ttls=settings.cache,
                     capabilities=settings.capabilities,
+                    max_attachment_bytes=settings.max_attachment_bytes,
                 )
             )
         return cls(runtimes)

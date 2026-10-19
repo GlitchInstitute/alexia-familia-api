@@ -47,6 +47,7 @@ LOGON_PATH: Final = "/ACWeb/LogOn.aspx"
 HOME_PATH: Final = "/ACWeb/paginas/Home/HomeMetro.aspx"
 MESSAGES_PATH: Final = "/ACWeb/paginas/Comunicacion/Comunicados.aspx"
 MESSAGE_PATH: Final = "/ACWeb/paginas/Comunicacion/Comunicado.aspx"
+REPOSITORY_PATH: Final = "/ACWeb/Controladores/ControladorRepositorio.ashx"
 FEED_QUERY: Final = frozenset({"jqGridID", "_search", "nd", "rows", "page", "sidx", "sord"})
 _FEED_NUMBERS: Final = ("nd", "rows", "page")
 _MESSAGE_QUERY: Final = frozenset(
@@ -58,6 +59,11 @@ _MESSAGE_QUERY: Final = frozenset(
         "TxtDefaultCom",
         "AccionExtraCom",
     }
+)
+_DOWNLOAD_QUERY: Final = frozenset({"tipo", "nombre", "alias"})
+_DOWNLOAD_FAILED_PAGE: Final = (
+    "<html><head><title>Error</title></head><body>No se ha podido descargar el fichero."
+    "</body></html>"
 )
 
 EXPIRED_LOGON_TEXT: Final = "La sesión ha caducado. Vuelva a iniciar sesión."
@@ -104,6 +110,9 @@ class SimOptions:
     home_route: str | None = None
     feed_cell_count: int | None = None
     message_time: str | None = None
+    download_as_page: bool = False
+    download_extra_bytes: int = 0
+    """Bytes added to the end of every download, or taken off the end when negative."""
 
 
 @dataclass(slots=True)
@@ -284,6 +293,7 @@ class _SimTransport(httpx.AsyncBaseTransport):
 class _Counters:
     check_session_calls: int = 0
     login_attempts: int = 0
+    downloads: int = 0
     token_failures_left: int = 0
     failed_logins: dict[str, int] = field(default_factory=dict)
 
@@ -326,6 +336,7 @@ class PortalSim:
             Route(HOME_PATH, self._home, methods=["GET"]),
             Route(MESSAGES_PATH, self._messages, methods=["GET"]),
             Route(MESSAGE_PATH, self._message, methods=["GET"]),
+            Route(REPOSITORY_PATH, self._download, methods=["GET"]),
             Route("/ACWeb/paginas/General/MantenerSesion.aspx", self._keep_alive, methods=["GET"]),
             Route("/ACWeb/paginas/General/LogOff.aspx", self._log_off, methods=["GET"]),
         ]
@@ -620,6 +631,37 @@ class PortalSim:
         if self.options.message_time is not None:
             data["HoraPublicacion"] = self.options.message_time
         return data
+
+    async def _download(self, request: Request) -> Response:
+        session = self._live_session(request)
+        if session is None or self._family_of(session) is None:
+            return RedirectResponse(
+                f"{LOGON_PATH}?ReturnUrl={quote(REPOSITORY_PATH, safe='')}", status_code=302
+            )
+        self.counters.downloads += 1
+        query = dict(request.query_params)
+        message = self._message_of(session, session.message_guid)
+        files = message.files if message is not None else ()
+        file = next((item for item in files if item.id == query.get("nombre")), None)
+        came_from = request.headers.get("referer", "")
+        from_the_message = (
+            came_from.endswith(_message_url(session.message_guid))
+            or not self.options.require_referer
+        )
+        shaped = (
+            set(query) == _DOWNLOAD_QUERY
+            and query["tipo"] == "6"
+            and file is not None
+            and query["alias"] == file.name
+            and request.headers.get("accept") == "*/*"
+        )
+        if not (shaped and from_the_message) or file is None:
+            return _server_error()
+        if self.options.download_as_page:
+            return HTMLResponse(_DOWNLOAD_FAILED_PAGE)
+        extra = self.options.download_extra_bytes
+        data = file.data[:extra] if extra < 0 else file.data + b"\x00" * extra
+        return Response(data, media_type="application/octet-stream")
 
     async def _home(self, request: Request) -> Response:
         session = self._live_session(request)

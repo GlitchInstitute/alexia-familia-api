@@ -39,6 +39,7 @@ from alexia_api.domain.ids import (
     parse_role_id,
     parse_student_id,
 )
+from alexia_api.domain.media import MEBIBYTE
 
 ENV_PREFIX: Final = "ALEXIA_API_"
 ENV_NESTED_DELIMITER: Final = "__"
@@ -289,6 +290,16 @@ class Settings(BaseSettings):
         ge=0,
         description="How many requests one API key may make each minute. Zero turns it off.",
     )
+    max_attachment_mib: int = Field(
+        default=25,
+        ge=1,
+        le=256,
+        description=(
+            "The largest file, in mebibytes, that the server fetches from the portal and hands "
+            "to a client. A file is held in memory while it travels, so a higher number needs "
+            "more memory for each download in progress."
+        ),
+    )
     docs_enabled: bool = Field(
         default=True,
         description=(
@@ -381,6 +392,10 @@ class Settings(BaseSettings):
     @property
     def tzinfo(self) -> ZoneInfo:
         return ZoneInfo(self.timezone)
+
+    @property
+    def max_attachment_bytes(self) -> int:
+        return self.max_attachment_mib * MEBIBYTE
 
 
 class FixedSettings(Settings):

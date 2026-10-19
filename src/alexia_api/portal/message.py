@@ -71,7 +71,7 @@ def _wall_of(reply: wire.MessageReply) -> datetime:
     return wall
 
 
-def _require_the_row(summary: MessageSummary, reply: wire.MessageReply, wall: datetime) -> None:
+def _require_the_row(summary: MessageSummary, reply: wire.MessageReply) -> None:
     """Refuse a page that is not the message the list row describes.
 
     The portal remembers the open message in the session, so a page can show another message
@@ -79,7 +79,7 @@ def _require_the_row(summary: MessageSummary, reply: wire.MessageReply, wall: da
     message's id.
     """
     same = (
-        wall.date() == summary.received_on
+        _wall_of(reply).date() == summary.received_on
         and _same_text(reply.subject_1, summary.subject)
         and (not reply.sender or _same_text(reply.sender, summary.sender))
     )
@@ -103,8 +103,8 @@ def _render(reply: wire.MessageReply) -> tuple[Rendered, tuple[Translation, ...]
     return render_body(reply.text_1), _translations(reply)
 
 
-async def read_message(tx: Tx, summary: MessageSummary) -> MessageContent:
-    """Open a message and read its page.
+async def read_reply(tx: Tx, summary: MessageSummary) -> wire.MessageReply:
+    """Open a message, ask its page for the data, and check the page is the message of the row.
 
     The portal may mark the message read when its page opens. Whether it does is not known.
     """
@@ -112,12 +112,17 @@ async def read_message(tx: Tx, summary: MessageSummary) -> MessageContent:
     reply = await call_ws(
         tx, GET_MESSAGE_DATA, wire.EmptyParams(), referer=tx.absolute(message_path(summary.id))
     )
-    wall = _wall_of(reply)
-    _require_the_row(summary, reply, wall)
+    _require_the_row(summary, reply)
+    return reply
+
+
+async def read_message(tx: Tx, summary: MessageSummary) -> MessageContent:
+    """Read the words, the files and the facts of one message."""
+    reply = await read_reply(tx, summary)
     # A large body takes a second of CPU to clean. A thread keeps the other accounts moving.
     main, translations = await asyncio.to_thread(_render, reply)
     return MessageContent(
-        sent_at=instant_of(wall, tx.zone),
+        sent_at=instant_of(_wall_of(reply), tx.zone),
         body=main.body,
         links=main.links,
         attachments=tuple(

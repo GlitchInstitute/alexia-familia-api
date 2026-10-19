@@ -10,6 +10,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import ClassVar, Final, Literal, assert_never
 
+from alexia_api.domain.media import MEBIBYTE
+
 Interstitial = Literal["CambiarPws", "TxtLegales", "OKCuenta", "MatOnline", "Classroom"]
 TransportReason = Literal["timeout", "network", "redirect", "blocked", "too_large"]
 DenialReason = Literal[
@@ -157,6 +159,17 @@ class Transport:
 
 
 @dataclass(frozen=True, slots=True)
+class AttachmentTooLarge:
+    """A file is bigger than the operator allows this server to carry, so it was not fetched.
+
+    The limit is in bytes. The setting that holds it counts whole mebibytes.
+    """
+
+    limit: int
+    code: ClassVar[str] = "attachment_too_large"
+
+
+@dataclass(frozen=True, slots=True)
 class Denied:
     """The server's own rules refused a call before it left the process."""
 
@@ -208,6 +221,7 @@ type PortalErrorDetail = (
     | UnexpectedReply
     | SchemaDrift
     | Transport
+    | AttachmentTooLarge
     | Denied
     | ComposeRejected
     | ComposeMismatch
@@ -266,6 +280,12 @@ def describe(detail: PortalErrorDetail) -> str:
             return f"the portal changed the shape of {where}"
         case Transport(reason=reason):
             return f"the network call to the portal failed ({reason})"
+        case AttachmentTooLarge(limit=limit):
+            return (
+                f"the file is larger than the {limit // MEBIBYTE} MiB this server carries, "
+                "set ALEXIA_API_MAX_ATTACHMENT_MIB to a higher number to allow it, "
+                "or open the message in the portal to get the file"
+            )
         case Denied(call=call, reason="writes_disabled"):
             return (
                 f"{call} writes to the portal and writes are switched off, "

@@ -13,8 +13,10 @@ from alexia_api.clock import ManualClock
 from alexia_api.config import AccountSettings, Settings
 from alexia_api.domain.errors import PortalError, PortalErrorDetail
 from alexia_api.domain.ids import RoleId, parse_account_id
+from alexia_api.domain.messages import FolderName, MessageSummary
 from alexia_api.portal.breaker import BreakerStore
 from alexia_api.portal.gateway import Gateway
+from alexia_api.portal.inbox import read_feed
 from alexia_api.portal.login import PortalCredentials
 from alexia_api.portal.session import Gates, PortalSession
 from alexia_api.services.registry import Registry
@@ -55,6 +57,14 @@ def seeded(number: int, username: str = DEMO_USER_A) -> SimMessage:
     family = default_world().family_for(username)
     assert family is not None
     return next(message for message in family.messages if message.guid == synthetic_guid(number))
+
+
+async def listed_row(
+    gateway: Gateway, number: int, folder: FolderName = "received"
+) -> MessageSummary:
+    """The row that a folder list shows for a message of the simulator's world."""
+    feed = await gateway.call(lambda tx: read_feed(tx, folder))
+    return next(row for row in feed.messages if row.id == synthetic_guid(number))
 
 
 async def failure_of(awaitable: Awaitable[object]) -> PortalErrorDetail:

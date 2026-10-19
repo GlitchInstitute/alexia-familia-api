@@ -68,6 +68,7 @@ async def test_the_operation_ids_read_well_in_a_generated_client(api: Api) -> No
         "list_folders",
         "list_messages",
         "get_message",
+        "download_attachment",
     } <= ids
 
 
@@ -160,6 +161,20 @@ async def test_the_message_route_documents_its_folder_and_what_opening_may_do(ap
     assert parameters["folder"]["schema"]["enum"] == ["received", "sent"]
     assert parameters["message"]["in"] == "path"
     assert "may mark it as read" in operation["description"]
+
+
+async def test_the_download_route_documents_a_file_and_how_it_is_saved(api: Api) -> None:
+    path = "/v1/accounts/{account}/messages/{message}/attachments/{attachment}"
+    operation = (await schema_of(api))["paths"][path]["get"]
+    parameters = {parameter["name"]: parameter for parameter in operation["parameters"]}
+    ok = operation["responses"]["200"]
+
+    assert ok["content"] == {"*/*": {"schema": {"type": "string", "format": "binary"}}}
+    assert set(ok["headers"]) == {"Content-Disposition"}
+    assert {"404", "413", "502", "503", "504"} <= set(operation["responses"])
+    assert parameters["attachment"]["in"] == "path"
+    assert parameters["folder"]["schema"]["enum"] == ["received", "sent"]
+    assert "attachment_too_large" in operation["description"]
 
 
 async def test_the_problem_schema_lists_what_a_client_can_rely_on(api: Api) -> None:

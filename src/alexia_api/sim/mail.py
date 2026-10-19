@@ -31,9 +31,10 @@ _HTML_SAFE: Final = str.maketrans({"<": "\\u003c", ">": "\\u003e", "&": "\\u0026
 
 @dataclass(frozen=True, slots=True)
 class SimFile:
+    """A file attached to a message. The portal serves every one of them as a plain byte stream."""
+
     id: str
     name: str
-    content_type: str
     data: bytes
 
 

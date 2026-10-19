@@ -239,10 +239,27 @@ def test_forms_cannot_be_switched_on_without_writes(monkeypatch: pytest.MonkeyPa
         ("request_timeout_seconds = 0", "request_timeout_seconds"),
         ("rate_limit_per_minute = -5", "rate_limit_per_minute"),
         ('log_level = "loud"', "log_level"),
+        ("max_attachment_mib = 0", "max_attachment_mib"),
+        ("max_attachment_mib = 257", "max_attachment_mib"),
     ],
 )
 def test_out_of_range_values_name_the_setting(tmp_path: Path, line: str, needle: str) -> None:
     assert needle in explain(write(tmp_path, line + "\n" + ONE_ACCOUNT))
+
+
+@pytest.mark.parametrize(
+    ("mebibytes", "expected"), [(1, 1_048_576), (25, 26_214_400), (256, 268_435_456)]
+)
+def test_the_file_size_limit_is_set_in_mebibytes_and_used_in_bytes(
+    tmp_path: Path, mebibytes: int, expected: int
+) -> None:
+    settings = load_settings(write(tmp_path, f"max_attachment_mib = {mebibytes}\n{ONE_ACCOUNT}"))
+
+    assert settings.max_attachment_bytes == expected
+
+
+def test_a_file_up_to_25_mebibytes_is_carried_unless_the_operator_says_otherwise() -> None:
+    assert load_settings(None).max_attachment_bytes == 25 * 1024 * 1024
 
 
 def test_slugs_can_be_pinned_to_children(tmp_path: Path) -> None:

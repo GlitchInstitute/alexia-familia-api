@@ -39,6 +39,11 @@
 # least 0.
 # rate_limit_per_minute = 120
 
+# The largest file, in mebibytes, that the server fetches from the portal and hands to a
+# client. A file is held in memory while it travels, so a higher number needs more memory
+# for each download in progress. It must be at least 1 and at most 256.
+# max_attachment_mib = 25
+
 # Serves /docs, /redoc, and /openapi.json. The /docs page loads its scripts from a public
 # CDN in your browser. Turn this off when the server is on the internet.
 # docs_enabled = true

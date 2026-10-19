@@ -108,7 +108,7 @@ class Attachment(Model):
     id: AttachmentId = Field(
         description=(
             "A token that names the file within its message. Treat it as opaque. It is safe to "
-            "put in a URL path."
+            "put in a URL path, and the download address of the file ends with it."
         )
     )
     name: str = Field(description="The file's name as the sender gave it.")

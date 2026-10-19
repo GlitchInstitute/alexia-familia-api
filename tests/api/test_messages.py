@@ -445,7 +445,15 @@ async def test_a_page_that_changed_shape_is_a_bad_gateway_that_does_not_leak_the
     assert body["request_id"]
 
 
-@pytest.mark.parametrize("path", [FOLDERS, MESSAGES, f"{MESSAGES}/{RECEIVED[0]}"])
+@pytest.mark.parametrize(
+    "path",
+    [
+        FOLDERS,
+        MESSAGES,
+        f"{MESSAGES}/{RECEIVED[0]}",
+        f"{MESSAGES}/{RECEIVED[0]}/attachments/dG9rZW4",
+    ],
+)
 async def test_every_mailbox_route_says_503_for_a_blocked_account(
     make_api: MakeApi, harness: Harness, path: str
 ) -> None:

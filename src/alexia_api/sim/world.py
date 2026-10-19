@@ -17,6 +17,10 @@ def synthetic_guid(number: int) -> str:
     return f"5afe0000-0000-4000-8000-{number:012x}"
 
 
+MUSEUM_FORM_FILE_ID: Final = f"{synthetic_guid(0xA01)}/autorizacion museo.pdf"
+"""The portal's id for the permission slip of the museum trip, the file the demo shows."""
+
+
 @dataclass(frozen=True, slots=True)
 class SimStaff:
     id: str
@@ -189,9 +193,8 @@ def _mail_of_marta() -> tuple[SimMessage, ...]:
             body=_MUSEUM_TRIP,
             files=(
                 SimFile(
-                    id=f"{synthetic_guid(0xA01)}/autorizacion museo.pdf",
+                    id=MUSEUM_FORM_FILE_ID,
                     name="Autorización museo.pdf",
-                    content_type="application/pdf",
                     data=_PDF,
                 ),
             ),
@@ -237,7 +240,6 @@ def _mail_of_marta() -> tuple[SimMessage, ...]:
                 SimFile(
                     id=f"{synthetic_guid(0xA02)}/menu-octubre.pdf",
                     name="Menú octubre.pdf",
-                    content_type="application/pdf",
                     data=_PDF,
                 ),
             ),
@@ -279,7 +281,6 @@ def _mail_of_pablo() -> tuple[SimMessage, ...]:
                 SimFile(
                     id=f"{synthetic_guid(0xA11)}/partitura.pdf",
                     name="Partitura.pdf",
-                    content_type="application/pdf",
                     data=_PDF,
                 ),
             ),

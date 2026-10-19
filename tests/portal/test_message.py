@@ -16,38 +16,29 @@ from alexia_api.domain.messages import (
     FolderName,
     Link,
     MessageContent,
-    MessageSummary,
     Translation,
 )
 from alexia_api.portal import wire
 from alexia_api.portal.allowlist import GET_MESSAGE_DATA
 from alexia_api.portal.body import Rendered, render_body
 from alexia_api.portal.gateway import Gateway
-from alexia_api.portal.inbox import read_feed
 from alexia_api.portal.message import message_path, open_message, read_message
 from alexia_api.portal.session import Tx
 from alexia_api.portal.ws import call_ws
 from alexia_api.sim.app import MESSAGE_PATH, MESSAGES_PATH
 from alexia_api.sim.mail import SimFile, SimTranslation
 from alexia_api.sim.world import DEMO_PASSWORD_B, DEMO_USER_A, DEMO_USER_B, synthetic_guid
-from tests.harness import Failure, Harness, seeded
+from tests.harness import Failure, Harness, listed_row, seeded
 
 MADRID = ZoneInfo("Europe/Madrid")
 DATA_PATH = "/ACWeb/WS_Data/WSComunicados.asmx/GetDatosPaginaComunicado"
 DRIFT_WHERE = "ws:WSComunicados.GetDatosPaginaComunicado reply"
 
 
-async def summary_of(
-    gateway: Gateway, number: int, folder: FolderName = "received"
-) -> MessageSummary:
-    feed = await gateway.call(lambda tx: read_feed(tx, folder))
-    return next(row for row in feed.messages if row.id == synthetic_guid(number))
-
-
 async def content_of(
     gateway: Gateway, number: int, folder: FolderName = "received"
 ) -> MessageContent:
-    summary = await summary_of(gateway, number, folder)
+    summary = await listed_row(gateway, number, folder)
     return await gateway.call(lambda tx: read_message(tx, summary))
 
 
@@ -263,7 +254,7 @@ async def test_the_words_are_cleaned_off_the_thread_of_the_event_loop(
 
 async def test_it_opens_the_page_and_then_asks_for_its_data(harness: Harness) -> None:
     gateway = harness.gateway()
-    row = await summary_of(gateway, 0x1001)
+    row = await listed_row(gateway, 0x1001)
     before = len(harness.sim.requests)
 
     await gateway.call(lambda tx: read_message(tx, row))
@@ -297,7 +288,7 @@ async def test_the_subject_may_differ_from_the_row_in_case_spacing_and_length(
     harness: Harness, subject: str
 ) -> None:
     gateway = harness.gateway()
-    row = (await summary_of(gateway, 0x1001)).model_copy(update={"subject": subject})
+    row = (await listed_row(gateway, 0x1001)).model_copy(update={"subject": subject})
 
     content = await gateway.call(lambda tx: read_message(tx, row))
 
@@ -320,7 +311,7 @@ async def test_a_page_that_is_not_the_message_of_the_row_is_refused(
     harness: Harness, failure: Failure, changes: dict[str, object]
 ) -> None:
     gateway = harness.gateway()
-    row = (await summary_of(gateway, 0x1001)).model_copy(update=changes)
+    row = (await listed_row(gateway, 0x1001)).model_copy(update=changes)
 
     detail = await failure(gateway.call(lambda tx: read_message(tx, row)))
 
@@ -341,7 +332,7 @@ async def test_the_data_call_answers_only_for_a_message_the_session_has_open(
     harness: Harness, failure: Failure
 ) -> None:
     gateway = harness.gateway()
-    row = await summary_of(gateway, 0x1001)
+    row = await listed_row(gateway, 0x1001)
 
     detail = await failure(
         gateway.call(
@@ -358,7 +349,7 @@ async def test_the_data_call_must_come_from_the_page_of_the_open_message(
     harness: Harness, failure: Failure
 ) -> None:
     gateway = harness.gateway()
-    row = await summary_of(gateway, 0x1001)
+    row = await listed_row(gateway, 0x1001)
 
     async def from_the_list(tx: Tx) -> object:
         await open_message(tx, row.id)
@@ -375,7 +366,7 @@ async def test_a_message_the_school_takes_back_after_its_page_opened_is_a_reject
     harness: Harness, failure: Failure
 ) -> None:
     gateway = harness.gateway()
-    row = await summary_of(gateway, 0x1001)
+    row = await listed_row(gateway, 0x1001)
 
     async def taken_back(tx: Tx) -> object:
         await open_message(tx, row.id)
@@ -395,7 +386,7 @@ async def test_a_message_the_family_does_not_have_cannot_be_opened(
     other_family = harness.gateway(
         account="family-b", credentials=harness.credentials(DEMO_USER_B, DEMO_PASSWORD_B)
     )
-    theirs = await summary_of(other_family, 0x1101)
+    theirs = await listed_row(other_family, 0x1101)
     ours = harness.gateway()
 
     detail = await failure(ours.call(lambda tx: open_message(tx, theirs.id)))
@@ -410,7 +401,7 @@ async def test_a_time_that_is_not_on_any_clock_is_schema_drift(
     harness: Harness, failure: Failure, time: str
 ) -> None:
     gateway = harness.gateway()
-    row = await summary_of(gateway, 0x1001)
+    row = await listed_row(gateway, 0x1001)
     harness.sim.options.message_time = time
 
     detail = await failure(gateway.call(lambda tx: read_message(tx, row)))
@@ -425,7 +416,7 @@ async def test_a_time_in_another_shape_is_schema_drift(
     harness: Harness, failure: Failure, time: str
 ) -> None:
     gateway = harness.gateway()
-    row = await summary_of(gateway, 0x1001)
+    row = await listed_row(gateway, 0x1001)
     harness.sim.options.message_time = time
 
     detail = await failure(gateway.call(lambda tx: read_message(tx, row)))
@@ -437,7 +428,7 @@ async def test_a_time_in_another_shape_is_schema_drift(
 async def test_a_file_the_portal_lists_without_an_id_is_schema_drift(
     harness: Harness, failure: Failure
 ) -> None:
-    nameless = SimFile(id="", name="a.pdf", content_type="application/pdf", data=b"x")
+    nameless = SimFile(id="", name="a.pdf", data=b"x")
     harness.deliver(
         DEMO_USER_A, replace(seeded(0x1008), guid=synthetic_guid(0x1205), files=(nameless,))
     )
@@ -452,7 +443,7 @@ async def test_a_session_that_ended_is_replaced_and_the_reader_never_notices(
     harness: Harness,
 ) -> None:
     gateway = harness.gateway()
-    row = await summary_of(gateway, 0x1001)
+    row = await listed_row(gateway, 0x1001)
     harness.sim.expire_all_sessions()
 
     content = await gateway.call(lambda tx: read_message(tx, row))

@@ -1,10 +1,11 @@
 """The message folders of an account and the messages in them."""
 
-from typing import Annotated, Final
+from typing import Annotated, Any, Final
 
 from fastapi import APIRouter, Path, Query, Response
 
 from alexia_api.api.errors import problem_responses
+from alexia_api.api.files import content_disposition
 from alexia_api.api.params import CACHE_HEADERS, FreshQuery, ReadAccount, stamp
 from alexia_api.api.schemas import FolderList, MessagePage
 from alexia_api.domain.messages import FolderName, Message, MessageSummary
@@ -44,6 +45,30 @@ MessagePath = Annotated[
         )
     ),
 ]
+AttachmentPath = Annotated[
+    str,
+    Path(
+        description=(
+            "The file's id, as the `attachments` of the message show it. Use it as it is, "
+            "because it is an opaque token and not the portal's own id."
+        )
+    ),
+]
+FILE_RESPONSE: Final[dict[int | str, dict[str, Any]]] = {
+    200: {
+        "description": "The file itself.",
+        "content": {"*/*": {"schema": {"type": "string", "format": "binary"}}},
+        "headers": {
+            "Content-Disposition": {
+                "description": (
+                    "Always `attachment`, with the file's name in a form that is safe to save "
+                    "under."
+                ),
+                "schema": {"type": "string"},
+            },
+        },
+    },
+}
 
 
 def _matching(
@@ -133,3 +158,37 @@ async def get_message(
     found = await account.message(folder, message, fresh=fresh)
     stamp(response, found)
     return found.value
+
+
+@router.get(
+    "/messages/{message}/attachments/{attachment}",
+    summary="Download one file of a message",
+    description=(
+        "Needs the `read` scope. Gives the bytes of one file that the `attachments` of the "
+        "message list. The server fetches the file from the portal every time and keeps nothing, "
+        "so you always get the file as it is now. The message must be in the list of the folder "
+        "you name, so a message the family sent needs `folder=sent`. A file larger than the "
+        "operator's `max_attachment_mib` is refused with a 413 and the code "
+        "`attachment_too_large`. The portal sends every file as a plain stream of bytes, so the "
+        "`Content-Type` is judged from the first bytes of the file. A web page or a vector "
+        "picture is never named as one. It comes as `text/plain`, so a client that shows a file "
+        "by its type cannot be made to run it. The answer always asks the client to save the "
+        "file. `fresh=true` reads the list of the message's folder again, which a message that "
+        "arrived a moment ago needs."
+    ),
+    response_class=Response,
+    responses={**problem_responses(413), **FILE_RESPONSE},
+)
+async def download_attachment(
+    account: ReadAccount,
+    message: MessagePath,
+    attachment: AttachmentPath,
+    folder: MessageFolderQuery = "received",
+    fresh: FreshQuery = False,
+) -> Response:
+    download = await account.attachment(folder, message, attachment, fresh=fresh)
+    return Response(
+        content=download.data,
+        media_type=download.media_type,
+        headers={"Content-Disposition": content_disposition(download.name)},
+    )

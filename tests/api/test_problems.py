@@ -7,6 +7,7 @@ import pytest
 from alexia_api.api.errors import map_portal_error, title_of
 from alexia_api.domain.errors import (
     ActionRequiredInPortal,
+    AttachmentTooLarge,
     BreakerOpen,
     ComposeMismatch,
     ComposeRejected,
@@ -48,6 +49,7 @@ EXPECTED_STATUS: tuple[tuple[PortalErrorDetail, int], ...] = (
     (Transport("redirect"), 502),
     (Transport("blocked"), 502),
     (Transport("too_large"), 502),
+    (AttachmentTooLarge(25 * 1024 * 1024), 413),
     (TokenInvalid(), 502),
     (PortalFault("boom"), 502),
     (WsRejected("WSHome.Call", 500), 502),

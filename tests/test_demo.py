@@ -37,7 +37,7 @@ async def served(tmp_path: Path) -> AsyncIterator[tuple[Demo, httpx.AsyncClient]
         yield pair
 
 
-@pytest.mark.parametrize("path", [path for path, _ in TOUR])
+@pytest.mark.parametrize("path", [item.path for item in TOUR])
 async def test_every_request_the_demo_suggests_works_with_its_own_key(
     served: tuple[Demo, httpx.AsyncClient], path: str
 ) -> None:
@@ -46,6 +46,20 @@ async def test_every_request_the_demo_suggests_works_with_its_own_key(
     response = await client.get(path, headers=bearer(demo))
 
     assert response.status_code == 200
+
+
+async def test_the_one_suggestion_that_answers_with_a_file_gives_a_real_file_to_save(
+    served: tuple[Demo, httpx.AsyncClient],
+) -> None:
+    demo, client = served
+    (download,) = [item for item in TOUR if item.save_as]
+
+    response = await client.get(download.path, headers=bearer(demo))
+
+    assert response.headers["content-type"] == "application/pdf"
+    assert response.content.startswith(b"%PDF-")
+    assert response.headers["content-disposition"].startswith("attachment;")
+    assert download.save_as == "museo.pdf"
 
 
 async def test_the_demo_holds_two_families_of_two_children(
@@ -176,9 +190,18 @@ def test_the_banner_shows_the_key_the_documentation_and_a_request_for_each_sugge
     lines = [line.strip() for line in text.splitlines()]
     assert KEY in lines
     assert "http://127.0.0.1:8000/docs" in lines
-    for path, what in TOUR:
-        request = f'curl -H "Authorization: Bearer {KEY}" "http://127.0.0.1:8000{path}"'
-        assert lines[lines.index(f"# {what}") + 1] == request
+    for item in TOUR:
+        request = f'curl -H "Authorization: Bearer {KEY}" "http://127.0.0.1:8000{item.path}"'
+        if item.save_as:
+            request += f' --output "{item.save_as}"'
+        assert lines[lines.index(f"# {item.what}") + 1] == request
+
+
+def test_only_a_request_that_answers_with_a_file_tells_curl_where_to_save_it() -> None:
+    text = banner("http://127.0.0.1:8000", KEY)
+
+    assert text.count("--output") == 1
+    assert 'museo.pdf"' in text
 
 
 def test_the_banner_promises_a_simulated_school_and_that_nothing_is_kept() -> None:

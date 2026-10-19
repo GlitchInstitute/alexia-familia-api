@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from typing import Final
 
 OCTET_STREAM: Final = "application/octet-stream"
+MEBIBYTE: Final = 1024 * 1024
 _TEXT_SAMPLE_BYTES: Final = 4096
 
 _PREFIXES: Final[tuple[tuple[bytes, str], ...]] = (

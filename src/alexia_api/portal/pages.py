@@ -10,6 +10,7 @@ from alexia_api.domain.errors import (
     UnexpectedReply,
 )
 from alexia_api.portal.session import PortalRequest, PortalResponse, Tx
+from alexia_api.portal.transport import DEFAULT_MAX_BYTES
 from alexia_api.portal.ws import MAINTENANCE_STATUSES, looks_like_logon_page
 
 COMUNICADOS_PAGE: Final = "/ACWeb/paginas/Comunicacion/Comunicados.aspx"
@@ -26,6 +27,7 @@ class PageRequest:
     referer: str
     accept: str
     xhr: bool = False
+    max_bytes: int = DEFAULT_MAX_BYTES
 
 
 async def get_page(tx: Tx, request: PageRequest) -> PortalResponse:
@@ -44,6 +46,7 @@ async def get_page(tx: Tx, request: PageRequest) -> PortalResponse:
             headers=headers,
             referer=request.referer,
             follow=False,
+            max_bytes=request.max_bytes,
         )
     )
 

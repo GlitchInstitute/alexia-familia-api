@@ -2,7 +2,7 @@
 
 from typing import Literal
 
-NotFoundKind = Literal["account", "child", "message"]
+NotFoundKind = Literal["account", "child", "message", "attachment"]
 
 
 class NotFoundError(Exception):

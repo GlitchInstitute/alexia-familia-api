@@ -21,6 +21,7 @@ from pydantic import SecretStr
 from alexia_api.api.app import create_app
 from alexia_api.clock import Clock
 from alexia_api.config import AccountSettings, FixedSettings, Settings
+from alexia_api.domain.ids import attachment_token
 from alexia_api.domain.security import ALL_ACCOUNTS
 from alexia_api.services.keys import FILE_NAME, ApiKeyStore
 from alexia_api.services.registry import Registry
@@ -30,6 +31,7 @@ from alexia_api.sim.world import (
     DEMO_PASSWORD_B,
     DEMO_USER_A,
     DEMO_USER_B,
+    MUSEUM_FORM_FILE_ID,
     SIM_INSTITUTION_KEY,
     synthetic_guid,
 )
@@ -45,18 +47,38 @@ WILDCARD_HOSTS: Final = frozenset({"0.0.0.0", "::"})  # noqa: S104
 """Host names that mean every network interface, which no browser can open. Nothing binds to
 them here. They only decide which address to show."""
 
+
+@dataclass(frozen=True, slots=True)
+class Suggestion:
+    """A request the demo suggests, with a few words about it.
+
+    A request that answers with a file says where to save it, because a terminal would show the
+    bytes of a file as noise.
+    """
+
+    path: str
+    what: str
+    save_as: str | None = None
+
+
+_MUSEUM_MESSAGE: Final = f"/v1/accounts/marta/messages/{synthetic_guid(0x1002)}"
+
 TOUR: Final = (
-    ("/v1/accounts", "the accounts this key may use"),
-    ("/v1/accounts/marta/children", "the children of one account"),
-    ("/v1/accounts/marta/children/lucia/tracking", "what the school tracks for one child"),
-    ("/v1/accounts/marta/folders", "the message folders of one account"),
-    ("/v1/accounts/marta/messages?limit=5", "the five newest messages"),
-    (
-        f"/v1/accounts/marta/messages/{synthetic_guid(0x1002)}",
-        "one message, with its words, its links and its files",
+    Suggestion("/v1/accounts", "the accounts this key may use"),
+    Suggestion("/v1/accounts/marta/children", "the children of one account"),
+    Suggestion(
+        "/v1/accounts/marta/children/lucia/tracking", "what the school tracks for one child"
+    ),
+    Suggestion("/v1/accounts/marta/folders", "the message folders of one account"),
+    Suggestion("/v1/accounts/marta/messages?limit=5", "the five newest messages"),
+    Suggestion(_MUSEUM_MESSAGE, "one message, with its words, its links and its files"),
+    Suggestion(
+        f"{_MUSEUM_MESSAGE}/attachments/{attachment_token(MUSEUM_FORM_FILE_ID)}",
+        "the file of that message",
+        save_as="museo.pdf",
     ),
 )
-"""Requests the demo suggests, as a path and a few words about it. A test asks for each one."""
+"""Requests the demo suggests. A test asks for each one."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -134,8 +156,9 @@ def banner(base: str, key: str, *, windows: bool = False) -> str:
     """
     curl = "curl.exe" if windows else "curl"
     requests = "\n\n".join(
-        f'    # {what}\n    {curl} -H "Authorization: Bearer {key}" "{base}{path}"'
-        for path, what in TOUR
+        f'    # {item.what}\n    {curl} -H "Authorization: Bearer {key}" "{base}{item.path}"'
+        + (f' --output "{item.save_as}"' if item.save_as else "")
+        for item in TOUR
     )
     return (
         "The demo is running against a simulated school. It needs no account and no password.\n"
