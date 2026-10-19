@@ -215,6 +215,39 @@ def test_a_list_setting_accepts_a_comma_separated_variable(
     assert load_settings(None).cors_origins == ["https://a.example.test", "https://b.example.test"]
 
 
+def test_host_names_are_kept_in_lower_case(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv(
+        "ALEXIA_API_ALLOWED_HOSTS", "API.Example.test, *.Example.test, 10.0.0.5, [::1]"
+    )
+
+    assert load_settings(None).allowed_hosts == [
+        "api.example.test",
+        "*.example.test",
+        "10.0.0.5",
+        "[::1]",
+    ]
+
+
+@pytest.mark.parametrize(
+    "entry",
+    [
+        "https://api.example.test",
+        "api.example.test:8000",
+        "api.example.test/path",
+        "*",
+        "*example.test",
+        "api example",
+    ],
+)
+def test_a_host_entry_that_is_not_a_name_is_refused(
+    monkeypatch: pytest.MonkeyPatch, entry: str
+) -> None:
+    monkeypatch.setenv("ALEXIA_API_ALLOWED_HOSTS", entry)
+
+    with pytest.raises(ConfigError, match="not a host name"):
+        load_settings(None)
+
+
 def test_the_write_switches_set_the_capabilities(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("ALEXIA_API_ALLOW_WRITES", "true")
     monkeypatch.setenv("ALEXIA_API_RESTORE_UNREAD", "true")

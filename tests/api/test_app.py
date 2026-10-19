@@ -10,7 +10,7 @@ from alexia_api import __version__
 from alexia_api.api.app import create_app
 from alexia_api.config import ConfigError
 from alexia_api.services.keys import FILE_NAME, ApiKeyStore
-from tests.api.support import Api, MakeApi, bearer
+from tests.api.support import Api, MakeApi, bearer, problem_of
 
 ORIGIN = "https://app.example.test"
 
@@ -179,10 +179,80 @@ async def test_a_browser_may_not_use_a_method_the_api_does_not_have(make_api: Ma
 
 async def test_only_listed_hosts_are_served(make_api: MakeApi) -> None:
     api = await make_api(allowed_hosts=["api.test"])
-    assert (await api.client.get("/healthz")).status_code == 200
-    refused = await api.client.get("/healthz", headers={"Host": "elsewhere.test"})
+    assert (await api.client.get("/")).status_code == 200
+    refused = await api.client.get("/", headers={"Host": "elsewhere.test"})
     assert refused.status_code == 400
     assert "x-request-id" in refused.headers
+
+
+async def test_a_refused_host_gets_a_problem_that_says_what_to_change(make_api: MakeApi) -> None:
+    api = await make_api(allowed_hosts=["api.test"])
+    refused = await api.client.get("/", headers={"Host": "elsewhere.test"})
+    body = problem_of(refused, status=400, code="invalid_host")
+    assert "'elsewhere.test'" in body["detail"]
+    assert "allowed_hosts" in body["detail"]
+
+
+async def test_a_refused_host_is_echoed_only_up_to_a_cap(make_api: MakeApi) -> None:
+    api = await make_api(allowed_hosts=["api.test"])
+    refused = await api.client.get("/", headers={"Host": "x" * 300 + ".test"})
+    body = problem_of(refused, status=400, code="invalid_host")
+    assert "x" * 80 + "..." in body["detail"]
+    assert "x" * 81 not in body["detail"]
+
+
+@pytest.mark.parametrize(
+    "sent", ["API.test", "api.test:8000", "Api.Test:80", "sub.api.test", "SUB.api.test:9"]
+)
+async def test_a_listed_host_is_served_whatever_its_case_and_port(
+    make_api: MakeApi, sent: str
+) -> None:
+    api = await make_api(allowed_hosts=["api.test", "*.api.test"])
+    assert (await api.client.get("/", headers={"Host": sent})).status_code == 200
+
+
+@pytest.mark.parametrize(
+    "sent", ["evilapi.test", "api.test.evil.test", "api.test@evil.test", "api.test:80@evil.test"]
+)
+async def test_a_look_alike_of_a_listed_host_is_refused(make_api: MakeApi, sent: str) -> None:
+    api = await make_api(allowed_hosts=["api.test"])
+    refused = await api.client.get("/", headers={"Host": sent})
+    problem_of(refused, status=400, code="invalid_host")
+
+
+async def test_a_subdomain_entry_does_not_serve_the_domain_itself(make_api: MakeApi) -> None:
+    api = await make_api(allowed_hosts=["*.api.test"])
+    assert (await api.client.get("/", headers={"Host": "one.api.test"})).status_code == 200
+    refused = await api.client.get("/", headers={"Host": "api.test"})
+    problem_of(refused, status=400, code="invalid_host")
+
+
+@pytest.mark.parametrize("path", ["/healthz", "/readyz"])
+async def test_the_probe_routes_answer_for_any_host_name(make_api: MakeApi, path: str) -> None:
+    api = await make_api(allowed_hosts=["api.test"])
+    listed = await api.client.get(path)
+    probed = await api.client.get(path, headers={"Host": "10.1.2.3:8000"})
+    assert probed.status_code == listed.status_code
+    assert probed.json() == listed.json()
+
+
+@pytest.mark.parametrize("path", ["/", "/healthz/", "/healthzz", "/docs", "/v1/accounts"])
+async def test_every_other_route_still_checks_the_host_name(make_api: MakeApi, path: str) -> None:
+    api = await make_api(allowed_hosts=["api.test"])
+    refused = await api.client.get(path, headers={"Host": "10.1.2.3:8000"})
+    assert refused.status_code == 400
+
+
+async def test_a_host_name_is_never_redirected_to_a_listed_one(make_api: MakeApi) -> None:
+    api = await make_api(allowed_hosts=["www.api.test"])
+    refused = await api.client.get("/", headers={"Host": "api.test"})
+    assert refused.status_code == 400
+    assert "location" not in refused.headers
+
+
+async def test_a_server_that_lists_hosts_still_starts_and_stops(make_api: MakeApi) -> None:
+    api = await make_api(allowed_hosts=["api.test"])
+    await run_lifespan(api.app)
 
 
 async def test_any_host_is_served_when_none_are_listed(api: Api) -> None:

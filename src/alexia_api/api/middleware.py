@@ -9,10 +9,12 @@ import logging
 import re
 import time
 import uuid
-from collections.abc import Collection
+from collections.abc import Callable, Collection, Sequence
 from typing import Final
 
 from starlette.datastructures import Headers, MutableHeaders
+from starlette.requests import Request
+from starlette.responses import Response
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 access_log = logging.getLogger("alexia_api.access")
@@ -21,6 +23,7 @@ REQUEST_ID_HEADER: Final = "x-request-id"
 UNMATCHED_ROUTE: Final = "unmatched"
 API_CONTENT_SECURITY_POLICY: Final = "default-src 'none'; frame-ancestors 'none'"
 _ACCEPTED_REQUEST_ID: Final = re.compile(r"[A-Za-z0-9._~-]{8,64}")
+_HOST_HEADER: Final = re.compile(r"(?P<name>\[[0-9a-f:.]+\]|[a-z0-9_.-]+)(:[0-9]{1,5})?")
 
 
 def protective_headers(*, page: bool = False) -> dict[str, str]:
@@ -44,6 +47,69 @@ def request_id_from(headers: Headers) -> str:
     if _ACCEPTED_REQUEST_ID.fullmatch(sent):
         return sent
     return uuid.uuid4().hex
+
+
+type Refusal = Callable[[Request], Response]
+
+
+def host_name_of(header: str) -> str | None:
+    """The name in a Host header, in lower case and without the port.
+
+    A header that is anything but a name with an optional port has no name. A value such as
+    `listed.test:80@other.test` would otherwise pass for `listed.test` and turn into a link to
+    `other.test` wherever a framework builds an address from the header.
+    """
+    found = _HOST_HEADER.fullmatch(header.strip().lower())
+    return found["name"] if found else None
+
+
+def host_is_listed(header: str, listed: Collection[str]) -> bool:
+    """Whether a Host header names a listed host.
+
+    An entry such as `*.example.test` stands for any subdomain and not for the domain itself.
+    """
+    name = host_name_of(header)
+    if name is None:
+        return False
+    for entry in listed:
+        wanted = entry.lower()
+        if wanted.startswith("*."):
+            suffix = wanted[1:]
+            if len(name) > len(suffix) and name.endswith(suffix):
+                return True
+        elif name == wanted:
+            return True
+    return False
+
+
+class ListedHosts:
+    """Refuses a request for a host name that is not listed, except on the probe routes.
+
+    A platform probes with the address it knows, such as the IP of a pod, so the probe routes
+    answer for any host name. They show nothing that a key protects. The caller builds the
+    refusal, so it can be a problem document like every other failure.
+    """
+
+    def __init__(
+        self,
+        app: ASGIApp,
+        *,
+        allowed_hosts: Sequence[str],
+        probe_paths: Collection[str],
+        refuse: Refusal,
+    ) -> None:
+        self._app = app
+        self._listed = tuple(allowed_hosts)
+        self._probe_paths = frozenset(probe_paths)
+        self._refuse = refuse
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] == "http" and scope["path"] not in self._probe_paths:
+            host = Headers(scope=scope).get("host", "")
+            if not host_is_listed(host, self._listed):
+                await self._refuse(Request(scope))(scope, receive, send)
+                return
+        await self._app(scope, receive, send)
 
 
 class RequestContext:

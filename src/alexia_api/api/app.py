@@ -9,13 +9,12 @@ from typing import Any, Final
 from fastapi import FastAPI
 from fastapi.routing import APIRoute
 from starlette.middleware.cors import CORSMiddleware
-from starlette.middleware.trustedhost import TrustedHostMiddleware
 from starlette.types import Lifespan
 
 from alexia_api import __version__
 from alexia_api.api.deps import Services
-from alexia_api.api.errors import install_handlers
-from alexia_api.api.middleware import RequestContext
+from alexia_api.api.errors import install_handlers, refuse_host
+from alexia_api.api.middleware import ListedHosts, RequestContext
 from alexia_api.api.openapi import install_openapi
 from alexia_api.api.routers import accounts, agenda, children, messages, meta
 from alexia_api.clock import Clock, SystemClock
@@ -163,7 +162,10 @@ def create_app(
         )
     if settings.allowed_hosts:
         app.add_middleware(
-            TrustedHostMiddleware, allowed_hosts=settings.allowed_hosts, www_redirect=False
+            ListedHosts,
+            allowed_hosts=settings.allowed_hosts,
+            probe_paths=meta.PROBE_PATHS,
+            refuse=refuse_host,
         )
     app.add_middleware(RequestContext, page_paths=DOCUMENTATION_PATHS)
     return app

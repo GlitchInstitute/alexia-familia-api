@@ -3,6 +3,7 @@ import re
 
 import pytest
 
+from alexia_api.api.middleware import host_is_listed, host_name_of
 from alexia_api.services.registry import AccountRuntime
 from tests.api.support import Api, MakeApi
 
@@ -150,3 +151,54 @@ async def test_a_server_error_is_logged_with_its_status(
         await api.get("/v1/accounts/marta/children")
     [record] = access_records(caplog)
     assert " 500 " in record.getMessage()
+
+
+@pytest.mark.parametrize(
+    ("header", "name"),
+    [
+        ("api.test", "api.test"),
+        ("API.Test:8000", "api.test"),
+        ("  api.test  ", "api.test"),
+        ("my-api.under_score.test", "my-api.under_score.test"),
+        ("10.1.2.3:80", "10.1.2.3"),
+        ("[::1]:8000", "[::1]"),
+        ("[FE80::1]", "[fe80::1]"),
+        ("", None),
+        ("api.test:", None),
+        ("api.test:123456", None),
+        ("api.test@evil.test", None),
+        ("api.test:80@evil.test", None),
+        ("api.test/path", None),
+        ("api test", None),
+        ("[::1", None),
+    ],
+)
+def test_a_host_header_gives_a_plain_name_or_nothing(header: str, name: str | None) -> None:
+    assert host_name_of(header) == name
+
+
+@pytest.mark.parametrize(
+    ("header", "listed", "expected"),
+    [
+        ("api.test", ["api.test"], True),
+        ("api.test", ["other.test", "api.test"], True),
+        ("api.test", ["API.Test"], True),
+        ("my-api.test", ["my-api.test"], True),
+        ("under_score.test", ["under_score.test"], True),
+        ("other.test", ["api.test"], False),
+        ("x@a.api.test", ["*.api.test"], False),
+        ("api.test", [], False),
+        ("a.api.test", ["*.api.test"], True),
+        ("a.b.api.test", ["*.api.test"], True),
+        ("api.test", ["*.api.test"], False),
+        (".api.test", ["*.api.test"], False),
+        ("evilapi.test", ["*.api.test"], False),
+        ("[::1]:8000", ["[::1]"], True),
+        ("[::2]", ["[::1]"], False),
+        ("api.test@evil.test", ["api.test"], False),
+    ],
+)
+def test_a_host_is_listed_by_its_name_or_by_a_subdomain_entry(
+    header: str, listed: list[str], expected: bool
+) -> None:
+    assert host_is_listed(header, listed) is expected

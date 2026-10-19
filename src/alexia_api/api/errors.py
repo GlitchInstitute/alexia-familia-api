@@ -252,6 +252,18 @@ def _shown(reference: str) -> str:
     return reference[:MAX_ECHOED_CHARACTERS] + "..."
 
 
+def refuse_host(request: Request) -> Response:
+    """The answer to a request for a host name that `allowed_hosts` does not list."""
+    host = _shown(request.headers.get("host", ""))
+    return problem_response(
+        request,
+        HTTPStatus.BAD_REQUEST,
+        "invalid_host",
+        f"this server does not answer for the host name '{host}', "
+        "the operator can add it to allowed_hosts",
+    )
+
+
 async def _api_error(request: Request, error: ApiError) -> Response:
     return problem_response(
         request, error.status, error.code, error.detail, headers=error.headers, extra=error.extra

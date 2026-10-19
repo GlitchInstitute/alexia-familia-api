@@ -46,6 +46,7 @@ ENV_NESTED_DELIMITER: Final = "__"
 CONFIG_ENV: Final = f"{ENV_PREFIX}CONFIG"
 DEFAULT_CONFIG_NAME: Final = "alexia-api.toml"
 _LOCAL_HOSTS: Final = frozenset({"localhost", "127.0.0.1", "::1"})
+_HOST_ENTRY: Final = re.compile(r"(\*\.)?[a-z0-9_-]+(\.[a-z0-9_-]+)*|\[[0-9a-f:.]+\]")
 _PLATFORM_VARIABLES: Final = re.compile(
     r"service_(host|port)(_.+)?|port(_\d+_(tcp|udp)(_.+)?)?|name|env_.+"
 )
@@ -322,8 +323,10 @@ class Settings(BaseSettings):
     allowed_hosts: Annotated[list[str], NoDecode] = Field(
         default_factory=list,
         description=(
-            "Answer only requests for these host names. Empty means any. "
-            "In a variable, separate the names with commas."
+            "Answer only requests for these host names, such as api.example.test, or "
+            "*.example.test for every subdomain. Write the names without https:// and without "
+            "a port. Empty means any. The two health checks answer for any name, because a "
+            "platform probes with its own address. In a variable, separate the names with commas."
         ),
     )
     log_level: LogLevel = Field(
@@ -344,6 +347,19 @@ class Settings(BaseSettings):
     @classmethod
     def _accept_a_comma_separated_list(cls, value: object) -> object:
         return _split_list(value)
+
+    @field_validator("allowed_hosts")
+    @classmethod
+    def _hosts_are_names(cls, value: list[str]) -> list[str]:
+        names = [entry.strip().lower() for entry in value]
+        for entry in names:
+            if not _HOST_ENTRY.fullmatch(entry):
+                raise ValueError(
+                    f"'{entry}' is not a host name, write a name such as api.example.test "
+                    "or *.example.test for every subdomain, without https:// or a port, "
+                    "and leave the list empty to serve every host name"
+                )
+        return names
 
     @field_validator("accounts")
     @classmethod

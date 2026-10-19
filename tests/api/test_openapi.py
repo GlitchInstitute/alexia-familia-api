@@ -137,6 +137,12 @@ async def test_readiness_documents_its_own_503_and_not_a_problem(api: Api) -> No
     assert list(response["content"]) == ["application/json"]
 
 
+@pytest.mark.parametrize("path", ["/healthz", "/readyz"])
+async def test_a_probe_route_documents_that_it_ignores_the_host_name(api: Api, path: str) -> None:
+    operation = (await schema_of(api))["paths"][path]["get"]
+    assert "any host name" in operation["description"]
+
+
 async def test_the_failures_a_client_can_meet_are_listed_for_each_route(api: Api) -> None:
     paths = (await schema_of(api))["paths"]
     accounts = paths["/v1/accounts"]["get"]["responses"]

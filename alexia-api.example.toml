@@ -52,8 +52,10 @@
 # origins with commas.
 # cors_origins = []
 
-# Answer only requests for these host names. Empty means any. In a variable, separate the
-# names with commas.
+# Answer only requests for these host names, such as api.example.test, or *.example.test
+# for every subdomain. Write the names without https:// and without a port. Empty means
+# any. The two health checks answer for any name, because a platform probes with its own
+# address. In a variable, separate the names with commas.
 # allowed_hosts = []
 
 # How much the server writes to its log.

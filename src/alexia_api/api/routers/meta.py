@@ -1,6 +1,6 @@
 """Routes that say whether the server is up and where things are. None of them needs a key."""
 
-from typing import Literal
+from typing import Final, Literal
 
 from fastapi import APIRouter, Response
 
@@ -11,6 +11,10 @@ from alexia_api.services.health import state_dir_writable
 from alexia_api.services.keys import ApiKeyStore, KeyStoreError
 
 router = APIRouter(tags=["meta"])
+
+HEALTH_PATH: Final = "/healthz"
+READY_PATH: Final = "/readyz"
+PROBE_PATHS: Final = (HEALTH_PATH, READY_PATH)
 
 type Check = Literal["ok", "failed"]
 
@@ -42,16 +46,18 @@ async def index(services: ServicesDep) -> Index:
         version=__version__,
         docs="/docs" if docs_on else None,
         openapi="/openapi.json" if docs_on else None,
-        health="/healthz",
+        health=HEALTH_PATH,
     )
 
 
 @router.get(
-    "/healthz",
+    HEALTH_PATH,
     summary="Report that the process is alive",
     description=(
         "Answers 200 whenever the process runs. It does not look at the portal, the accounts, "
-        "or the key file, so a container can use it as a liveness check."
+        "or the key file, so a container can use it as a liveness check. It answers for any "
+        "host name, even when `allowed_hosts` is set, because a platform probes with its own "
+        "address."
     ),
 )
 async def healthz() -> Health:
@@ -59,12 +65,13 @@ async def healthz() -> Health:
 
 
 @router.get(
-    "/readyz",
+    READY_PATH,
     summary="Report whether the server can serve requests",
     description=(
         "Answers 200 when at least one account and at least one API key are configured, the key "
         "file can be read, and the state directory is writable. Otherwise it answers 503 and "
-        "names the checks that failed. It never calls the portal."
+        "names the checks that failed. It never calls the portal. It answers for any host name, "
+        "like the liveness check."
     ),
     responses={503: {"model": Readiness, "description": "At least one check failed."}},
 )
