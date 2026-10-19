@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security problem
+    url: https://github.com/GlitchInstitute/alexia-familia-api/security/advisories/new
+    about: Use this private form for anything that could expose a password, a key, or a child's data. Please do not open a public issue for it.

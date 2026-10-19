@@ -1,0 +1,60 @@
+name: Bug report
+description: Something does not work the way the documentation says.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for taking the time to write.
+
+        This project signs in to a school's parent portal with a real login, so please read this before you paste anything.
+
+        **Never paste a password, an API key, a portal cookie, or the text of a message from the school.** Replace the names of children, teachers, and the school with made-up names. A problem response has a `code` and a `request_id`. Both are safe to share.
+
+        Run `alexia-api doctor` first. It names the fix for most setup problems.
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you do, and what did you expect?
+      description: Name the command or the request, and what you thought would happen.
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: What happened instead?
+      description: Paste the error text or the problem response.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: The output of `alexia-api --version`.
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: How do you run it?
+      options:
+        - pixi
+        - Docker
+        - pip
+        - Something else
+    validations:
+      required: true
+  - type: textarea
+    id: doctor
+    attributes:
+      label: Output of `alexia-api doctor`
+      description: |
+        The output names the folder of your files, your account names, your key names, and the address of the school's portal. Replace any of these that say something about you.
+      render: text
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Before you send
+      options:
+        - label: I removed passwords, keys, cookies, and the real names of children, teachers, and the school.
+          required: true

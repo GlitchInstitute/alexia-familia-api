@@ -92,8 +92,9 @@ lint = { cmd = "ruff check . && ruff format --check .", description = "Check sty
 fmt = { cmd = "ruff check --fix . && ruff format .", description = "Fix style problems and format the code." }
 typecheck = { cmd = "mypy", description = "Type check with mypy in strict mode." }
 privacy = { cmd = "python scripts/check_privacy.py --history", description = "Fail when a file or a commit holds real-looking personal data." }
+workflows = { cmd = "actionlint", description = "Check the GitHub Actions workflows, and the shell they run, for mistakes." }
 shell = { cmd = "shellcheck scripts/*.sh", description = "Check the shell scripts for mistakes." }
 docs = { cmd = "python scripts/gen_docs.py", description = "Write the pages that come from the code, such as the endpoint reference and the settings reference." }
 build = { cmd = "python -m build --no-isolation --outdir dist", description = "Build the wheel and the source archive into dist/." }
 dist-check = { cmd = "twine check --strict dist/*", depends-on = ["build"], description = "Build the package, then check that its metadata is valid." }
-check = { depends-on = ["lint", "typecheck", "shell", "privacy", "cov", "dist-check"], description = "Run every check that CI runs." }
+check = { depends-on = ["lint", "typecheck", "workflows", "shell", "privacy", "cov", "dist-check"], description = "Run every check that CI runs." }

@@ -1,0 +1,159 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  checks:
+    name: checks (${{ matrix.environment }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        environment: [dev, py312, py314]
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install pixi and the environment
+        uses: prefix-dev/setup-pixi@ad1da6449d9e506fd127fd67ab2d054a769f6a94 # v0.11.2
+        with:
+          pixi-version: v0.70.2
+          environments: ${{ matrix.environment }}
+          locked: true
+      - name: Lint
+        run: pixi run --environment ${{ matrix.environment }} lint
+      - name: Type check
+        run: pixi run --environment ${{ matrix.environment }} typecheck
+      - name: Test and enforce the coverage floor
+        run: pixi run --environment ${{ matrix.environment }} cov
+
+  privacy:
+    name: privacy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out the code and its history
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install pixi and the environment
+        uses: prefix-dev/setup-pixi@ad1da6449d9e506fd127fd67ab2d054a769f6a94 # v0.11.2
+        with:
+          pixi-version: v0.70.2
+          environments: dev
+          locked: true
+      - name: Look for personal data in the files and in every commit
+        run: pixi run --environment dev privacy
+
+  secrets:
+    name: secrets
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      GITLEAKS_VERSION: 8.30.1
+      GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+    steps:
+      - name: Check out the code and its history
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install gitleaks
+        run: |
+          curl --fail --silent --show-error --location \
+            --output "$RUNNER_TEMP/gitleaks.tar.gz" \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          echo "${GITLEAKS_SHA256}  $RUNNER_TEMP/gitleaks.tar.gz" | sha256sum --check --strict
+          tar --extract --gzip --file "$RUNNER_TEMP/gitleaks.tar.gz" --directory "$RUNNER_TEMP" gitleaks
+      - name: Look for secrets in every commit
+        run: '"$RUNNER_TEMP/gitleaks" git --no-banner --redact --verbose .'
+
+  scripts:
+    name: workflows and scripts
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install pixi and the environment
+        uses: prefix-dev/setup-pixi@ad1da6449d9e506fd127fd67ab2d054a769f6a94 # v0.11.2
+        with:
+          pixi-version: v0.70.2
+          environments: dev
+          locked: true
+      - name: Check the workflows and the shell they run
+        run: pixi run --environment dev workflows
+      - name: Check the shell scripts
+        run: pixi run --environment dev shell
+
+  package:
+    name: package
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install pixi and the environment
+        uses: prefix-dev/setup-pixi@ad1da6449d9e506fd127fd67ab2d054a769f6a94 # v0.11.2
+        with:
+          pixi-version: v0.70.2
+          environments: dev
+          locked: true
+      - name: Build the package and check its metadata
+        run: pixi run --environment dev dist-check
+      - name: Install the wheel into a clean virtual environment, as a pip user would
+        run: |
+          python3 -m venv "$RUNNER_TEMP/clean"
+          "$RUNNER_TEMP/clean/bin/pip" install --quiet dist/*.whl
+          "$RUNNER_TEMP/clean/bin/alexia-api" --version
+          "$RUNNER_TEMP/clean/bin/alexia-api" openapi --output "$RUNNER_TEMP/openapi.json"
+      - name: Run the tests from the source archive
+        run: |
+          mkdir "$RUNNER_TEMP/sdist"
+          tar --extract --gzip --file dist/*.tar.gz --directory "$RUNNER_TEMP/sdist" --strip-components 1
+          cd "$RUNNER_TEMP/sdist"
+          PYTHONPATH=src HYPOTHESIS_PROFILE=ci "$GITHUB_WORKSPACE/.pixi/envs/dev/bin/python" -m pytest -q -p no:cacheprovider
+
+  docker:
+    name: docker
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Check the compose file
+        run: docker compose config --quiet
+      - name: Build the image
+        run: docker build --tag alexia-familia-api:ci .
+      - name: Run the demo in the image and ask for every request it suggests
+        run: scripts/smoke_docker.sh alexia-familia-api:ci
+
+  ci-ok:
+    name: ci-ok
+    if: always()
+    needs: [checks, privacy, secrets, scripts, package, docker]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Fail when a job did not pass
+        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped')
+        run: exit 1

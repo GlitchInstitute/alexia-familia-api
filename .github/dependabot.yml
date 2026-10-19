@@ -1,0 +1,21 @@
+# Proposes updates to the actions that the workflows pin by commit and to the base images that
+# the Dockerfile pins by digest. The packages in pixi.lock are not covered, because Dependabot
+# does not read that file. CONTRIBUTING.md says how to update them with `pixi update`.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: ci
+
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: build

@@ -1,0 +1,39 @@
+name: Feature request
+description: Ask for something the API does not do yet.
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for the idea.
+
+        Read [docs/design.md](https://github.com/GlitchInstitute/alexia-familia-api/blob/main/docs/design.md) first. It lists what this project does, what it refuses to do, and why. A request that changes something at the school, such as sending a message or answering a form, only goes in behind a switch that is off by default, so please say whether yours is one of those.
+
+        Do not paste personal data from the portal. Describe what you see in your own words.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What do you want to do that you cannot do now?
+      description: Describe the task in your own words. A task is easier to judge than a solution.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: How could the API help?
+      description: A route, a field, a setting, or a document. Sketches are welcome.
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Does it read from the portal or change something at the school?
+      options:
+        - It only reads
+        - It changes something at the school
+        - I am not sure
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What did you try instead?
+      description: A script, a manual step, or another tool.
