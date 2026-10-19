@@ -254,7 +254,6 @@ These are the strongest arguments against the design and the answers.
 
 These need an owner decision and have a default.
 
-- License. The default is MIT.
 - Package and image publishing. The default is none until a first release.
 - A Spanish translation of the quickstart. The default is English only.
 - Keys for one child. A key limits the accounts it opens and not the children, so a key for a calendar app opens every child of the account. The default is to keep it that way until someone needs a key for one child.
