@@ -15,6 +15,7 @@ import math
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from datetime import date
 from html import escape
 from typing import Any, Final, Literal
 from urllib.parse import quote
@@ -29,6 +30,7 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from alexia_api.clock import Clock, SystemClock
 from alexia_api.domain.errors import Interstitial
+from alexia_api.sim import agenda
 from alexia_api.sim.mail import (
     FOLDER_OF_ID,
     SimFolder,
@@ -113,6 +115,16 @@ class SimOptions:
     download_as_page: bool = False
     download_extra_bytes: int = 0
     """Bytes added to the end of every download, or taken off the end when negative."""
+    agenda_ignores_end: bool = True
+    """The real feed answers up to the end of the term, whatever end the request names."""
+    agenda_standing_events: bool = True
+    """The real feed sends every school event of the term, inside the range or not."""
+    agenda_not_json: bool = False
+    """The feed answers with the logon page, as it does when the session is gone."""
+    agenda_bad_event: bool = False
+    """The first entry of the feed has a start that is not a date."""
+    agenda_feed_fails: bool = False
+    """The feed answers with the portal's server error, as it does when it cannot build a week."""
 
 
 @dataclass(slots=True)
@@ -124,6 +136,7 @@ class SimSession:
     family: SimFamily | None = None
     folder: SimFolder = "received"
     message_guid: str | None = None
+    open_agenda: tuple[agenda.SimAgendaScope, str] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -315,6 +328,8 @@ class PortalSim:
         self.counters = _Counters()
         self.in_flight = 0
         self.max_in_flight = 0
+        self.lesson_edits: dict[agenda.LessonKey, agenda.LessonEdit] = {}
+        self.cancelled_lessons: set[agenda.LessonKey] = set()
         self.services: dict[str, Service] = {
             "WSHome.GetWPSeguimiento": Service(frozenset({"idAlumno"}), self._tracking),
             "WSReuniones.GetEmpleadosByHijo": Service(frozenset({"guidHijo"}), self._roster),
@@ -337,6 +352,8 @@ class PortalSim:
             Route(MESSAGES_PATH, self._messages, methods=["GET"]),
             Route(MESSAGE_PATH, self._message, methods=["GET"]),
             Route(REPOSITORY_PATH, self._download, methods=["GET"]),
+            Route(agenda.PAGE_PATH, self._agenda_page, methods=["GET"]),
+            Route(agenda.FEED_PATH, self._agenda_feed, methods=["GET"]),
             Route("/ACWeb/paginas/General/MantenerSesion.aspx", self._keep_alive, methods=["GET"]),
             Route("/ACWeb/paginas/General/LogOff.aspx", self._log_off, methods=["GET"]),
         ]
@@ -347,6 +364,18 @@ class PortalSim:
 
     def expire_all_sessions(self) -> None:
         self.sessions.clear()
+
+    @property
+    def term(self) -> agenda.Term:
+        """The school year that the simulator's clock is in, which the agenda is laid out for."""
+        return agenda.term_of(self.clock.now().date())
+
+    def edit_lesson(self, person_id: str, slot_id: str, day: date, edit: agenda.LessonEdit) -> None:
+        """Change one lesson of one pupil on one day, as the school does in its timetable."""
+        self.lesson_edits[(person_id, slot_id, day)] = edit
+
+    def cancel_lesson(self, person_id: str, slot_id: str, day: date) -> None:
+        self.cancelled_lessons.add((person_id, slot_id, day))
 
     def _session_of(self, request: Request) -> SimSession | None:
         return self.sessions.get(request.cookies.get(SESSION_COOKIE, ""))
@@ -662,6 +691,93 @@ class PortalSim:
         extra = self.options.download_extra_bytes
         data = file.data[:extra] if extra < 0 else file.data + b"\x00" * extra
         return Response(data, media_type="application/octet-stream")
+
+    async def _agenda_page(self, request: Request) -> Response:
+        session = self._live_session(request)
+        family = self._family_of(session) if session is not None else None
+        if session is None or family is None:
+            return RedirectResponse(
+                f"{LOGON_PATH}?ReturnUrl={quote(agenda.PAGE_PATH, safe='')}", status_code=302
+            )
+        opened = agenda.page_target(
+            dict(request.query_params),
+            {child.person_id for child in family.children},
+            family.guardian.person_id,
+        )
+        if opened is None:
+            return _server_error()
+        session.open_agenda = opened
+        return HTMLResponse('<html><body><div id="calendar"></div></body></html>')
+
+    async def _agenda_feed(self, request: Request) -> Response:
+        session = self._live_session(request)
+        family = self._family_of(session) if session is not None else None
+        if session is None or family is None:
+            return RedirectResponse(
+                f"{LOGON_PATH}?ReturnUrl={quote(agenda.FEED_PATH, safe='')}", status_code=302
+            )
+        if self.options.agenda_feed_fails:
+            return _server_error()
+        if self.options.agenda_not_json:
+            return HTMLResponse('<html><body><input id="txtUsuario" /></body></html>')
+        asked = agenda.feed_seconds(dict(request.query_params))
+        opened = session.open_agenda
+        ajax = request.headers.get("x-requested-with") == "XMLHttpRequest"
+        came_from = request.headers.get("referer", "")
+        from_the_page = opened is not None and (
+            came_from.endswith(agenda.page_url(*opened)) or not self.options.require_referer
+        )
+        if asked is None or opened is None or not ajax or not from_the_page:
+            return _server_error()
+        entries = self._agenda_entries(family, opened, *asked)
+        if self.options.agenda_bad_event and entries:
+            entries[0] = {**entries[0], "start": "tomorrow morning"}
+        return JSONResponse(entries)
+
+    def _agenda_entries(
+        self,
+        family: SimFamily,
+        opened: tuple[agenda.SimAgendaScope, str],
+        start: int,
+        end: int,
+    ) -> list[dict[str, object]]:
+        scope, person_id = opened
+        term = self.term
+        first, last = agenda.asked_days(start, end)
+        if self.options.agenda_ignores_end:
+            last = max(last, term.last)
+        school_window = None if self.options.agenda_standing_events else (first, last)
+        object_guid = synthetic_guid(0x7F00)
+        child = next((item for item in family.children if item.person_id == person_id), None)
+        school = agenda.occasions_in(
+            (*self.world.calendar, *(child.events if child else ())),
+            term,
+            class_name=agenda.SCHOOL_EVENT_CLASS,
+            object_type=agenda.SCHOOL_EVENT_OBJECT,
+            object_guid=object_guid,
+            window=school_window,
+        )
+        if scope == "guardian":
+            interviews = agenda.occasions_in(
+                family.guardian.interviews,
+                term,
+                class_name=agenda.INTERVIEW_CLASS,
+                object_type=agenda.INTERVIEW_OBJECT,
+                object_guid=object_guid,
+                window=(first, last),
+            )
+            return [*school, *interviews]
+        lessons = agenda.lessons_between(
+            first,
+            last,
+            term,
+            person_id,
+            child.timetable if child else (),
+            edits=self.lesson_edits,
+            cancelled=self.cancelled_lessons,
+            object_guid=object_guid,
+        )
+        return [*lessons, *school]
 
     async def _home(self, request: Request) -> Response:
         session = self._live_session(request)

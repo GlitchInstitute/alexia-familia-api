@@ -11,6 +11,7 @@ from typing import Annotated, Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
 
 from alexia_api.domain.ids import GUID_PATTERN, attachment_token
+from alexia_api.domain.time import wall_of
 
 GuidText = Annotated[str, StringConstraints(pattern=GUID_PATTERN)]
 
@@ -158,3 +159,35 @@ class MessageReply(WireModel):
     published_at: str = Field(alias="HoraPublicacion", pattern=r"^[0-9]{2}:[0-9]{2}$")
     sender: str = Field(alias="NombreEmisor")
     child_names: str = Field(alias="NombreHijos")
+
+
+Flag = str | int | float | bool | None
+"""A counter of the agenda feed. The portal writes it as text, as a number, or as a boolean."""
+
+
+class FeedEvent(WireModel):
+    """One entry of the agenda feed, which is a JSON array of these.
+
+    The portal writes the local time of the school and ends it with a Z, which is wrong. The
+    feed carries more fields than these, such as colors and the flags for the teacher's own
+    tools, and nothing here uses them.
+    """
+
+    id: str = Field(min_length=1)
+    title: str
+    start: str
+    end: str
+    class_name: str = Field(alias="className")
+    teacher: str | None = Field(default=None, alias="seccion")
+    tasks: Flag = Field(default=None, alias="tareas")
+    activities: Flag = Field(default=None, alias="actividades")
+    notes: Flag = Field(default=None, alias="anotaciones")
+    tests: Flag = Field(default=None, alias="controles")
+    substitution: Flag = Field(default=None, alias="is_sustitucion")
+
+    @field_validator("start", "end")
+    @classmethod
+    def _is_a_wall_time(cls, value: str) -> str:
+        if wall_of(value) is None:
+            raise ValueError("not a date and a time written YYYY-MM-DDTHH:MM:SS")
+        return value

@@ -3,6 +3,7 @@
 from dataclasses import dataclass, field
 from typing import Final
 
+from alexia_api.sim.agenda import SimOccasion, SimSlot
 from alexia_api.sim.mail import SimFile, SimMessage, SimTranslation
 
 SIM_INSTITUTION_KEY: Final = "demo-school"
@@ -46,12 +47,15 @@ class SimChild:
     relation: str
     tracking: SimTracking = field(default_factory=SimTracking)
     staff: tuple[SimStaff, ...] = ()
+    timetable: tuple[SimSlot, ...] = ()
+    events: tuple[SimOccasion, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
 class SimGuardian:
     person_id: str
     first_name: str
+    interviews: tuple[SimOccasion, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,6 +71,7 @@ class SimFamily:
 class SimWorld:
     institution_key: str
     families: tuple[SimFamily, ...]
+    calendar: tuple[SimOccasion, ...] = ()
 
     def family_for(self, username: str) -> SimFamily | None:
         return next((family for family in self.families if family.username == username), None)
@@ -291,6 +296,79 @@ def _mail_of_pablo() -> tuple[SimMessage, ...]:
     )
 
 
+_BELLS: Final = (
+    ("09:00", "09:45"),
+    ("09:45", "10:30"),
+    ("11:00", "11:45"),
+    ("11:45", "12:30"),
+    ("15:00", "15:45"),
+    ("15:45", "16:30"),
+)
+_SUBJECTS: Final = (
+    "Matemáticas",
+    "Lengua",
+    "Inglés",
+    "Ciencias",
+    "Educación Física",
+    "Música",
+    "Plástica",
+    "Tutoría",
+)
+_TEACHERS: Final = (
+    "Ana Muestra",
+    "Carlos Ejemplo",
+    "Rosa Prueba",
+    "Tomás Demo",
+    "Elena Modelo",
+    "Iván Simulado",
+)
+
+
+def _timetable(owner: int) -> tuple[SimSlot, ...]:
+    """Six lessons a day from Monday to Friday. Each pupil has another week, so a mix-up shows."""
+    return tuple(
+        SimSlot(
+            id=synthetic_guid(0x7000 + owner * 0x100 + weekday * 0x10 + index),
+            weekday=weekday,
+            starts=starts,
+            ends=ends,
+            title=_SUBJECTS[(owner + weekday * 3 + index) % len(_SUBJECTS)],
+            teacher=_TEACHERS[(owner + weekday + index) % len(_TEACHERS)],
+        )
+        for weekday in range(1, 6)
+        for index, (starts, ends) in enumerate(_BELLS)
+    )
+
+
+def _occasion(
+    number: int,
+    title: str,
+    first: tuple[int, int],
+    last: tuple[int, int] | None = None,
+    *,
+    starts: str = "00:00",
+    ends: str = "23:59",
+) -> SimOccasion:
+    return SimOccasion(
+        id=synthetic_guid(number),
+        title=title,
+        first=first,
+        last=last or first,
+        starts=starts,
+        ends=ends,
+    )
+
+
+def _school_calendar() -> tuple[SimOccasion, ...]:
+    """The school's own dates. The portal writes a one-day holiday with either kind of end."""
+    return (
+        _occasion(0x7100, "FESTIVO", (10, 12), ends="00:00"),
+        _occasion(0x7101, "FESTIVO", (12, 8)),
+        _occasion(0x7102, "VACACIONES DE NAVIDAD", (12, 23), (1, 7)),
+        _occasion(0x7103, "ESCUELA DE PASCUA", (3, 30), (4, 2), starts="09:00", ends="17:00"),
+    )
+
+
 def default_world() -> SimWorld:
     """Two families with two children each, so tests and demos cover several accounts and kids."""
     tutor_a = SimStaff(synthetic_guid(0x601), "Ana Muestra Tutora", "Tutora")
@@ -301,7 +379,13 @@ def default_world() -> SimWorld:
     family_a = SimFamily(
         username=DEMO_USER_A,
         password=DEMO_PASSWORD_A,
-        guardian=SimGuardian(person_id=synthetic_guid(0x301), first_name="Marta"),
+        guardian=SimGuardian(
+            person_id=synthetic_guid(0x301),
+            first_name="Marta",
+            interviews=(
+                _occasion(0x7301, "Entrevista: Aceptada", (10, 20), starts="16:00", ends="16:30"),
+            ),
+        ),
         children=(
             SimChild(
                 student_id=synthetic_guid(0x101),
@@ -311,6 +395,10 @@ def default_world() -> SimWorld:
                 relation="Hija",
                 tracking=SimTracking(tasks=3, activities=1, notes=0, tests=2, incidents=0),
                 staff=(tutor_a, maths),
+                timetable=_timetable(1),
+                events=(
+                    _occasion(0x7211, "EXCURSIÓN AL MUSEO", (10, 30), starts="09:30", ends="14:00"),
+                ),
             ),
             SimChild(
                 student_id=synthetic_guid(0x102),
@@ -320,6 +408,8 @@ def default_world() -> SimWorld:
                 relation="Hijo",
                 tracking=SimTracking(tasks=1, activities=0, notes=2, tests=0, incidents=1),
                 staff=(tutor_b, music),
+                timetable=_timetable(2),
+                events=(_occasion(0x7221, "SALIDA A LA GRANJA", (11, 6)),),
             ),
         ),
         messages=_mail_of_marta(),
@@ -327,7 +417,13 @@ def default_world() -> SimWorld:
     family_b = SimFamily(
         username=DEMO_USER_B,
         password=DEMO_PASSWORD_B,
-        guardian=SimGuardian(person_id=synthetic_guid(0x311), first_name="Pablo"),
+        guardian=SimGuardian(
+            person_id=synthetic_guid(0x311),
+            first_name="Pablo",
+            interviews=(
+                _occasion(0x7311, "Entrevista: Pendiente", (11, 10), starts="17:00", ends="17:30"),
+            ),
+        ),
         children=(
             SimChild(
                 student_id=synthetic_guid(0x111),
@@ -337,6 +433,12 @@ def default_world() -> SimWorld:
                 relation="Hijo",
                 tracking=SimTracking(tasks=5, activities=2, notes=1, tests=1, incidents=0),
                 staff=(tutor_a, music),
+                timetable=_timetable(3),
+                events=(
+                    _occasion(
+                        0x7231, "ENSAYO GENERAL DEL CORO", (12, 15), starts="17:00", ends="18:30"
+                    ),
+                ),
             ),
             SimChild(
                 student_id=synthetic_guid(0x112),
@@ -346,8 +448,14 @@ def default_world() -> SimWorld:
                 relation="Hija",
                 tracking=SimTracking(tasks=0, activities=3, notes=0, tests=0, incidents=2),
                 staff=(tutor_b, maths),
+                timetable=_timetable(4),
+                events=(_occasion(0x7241, "JORNADA DEPORTIVA", (11, 20)),),
             ),
         ),
         messages=_mail_of_pablo(),
     )
-    return SimWorld(institution_key=SIM_INSTITUTION_KEY, families=(family_a, family_b))
+    return SimWorld(
+        institution_key=SIM_INSTITUTION_KEY,
+        families=(family_a, family_b),
+        calendar=_school_calendar(),
+    )
