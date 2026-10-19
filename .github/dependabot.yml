@@ -1,6 +1,11 @@
-# Proposes updates to the actions that the workflows pin by commit and to the base images that
+# Proposes updates to the actions that the workflows pin by commit and to the base image that
 # the Dockerfile pins by digest. The packages in pixi.lock are not covered, because Dependabot
 # does not read that file. CONTRIBUTING.md says how to update them with `pixi update`.
+#
+# The pixi image is ignored. Its version also sits in both workflows, a test makes the three
+# agree, and Dependabot would change only the Dockerfile. Ubuntu stays on its long term support
+# release, so Dependabot may propose a newer digest of the same tag and nothing newer.
+# CONTRIBUTING.md says how to move either one by hand.
 version: 2
 updates:
   - package-ecosystem: github-actions
@@ -19,3 +24,9 @@ updates:
       interval: weekly
     commit-message:
       prefix: build
+    ignore:
+      - dependency-name: prefix-dev/pixi
+      - dependency-name: ubuntu
+        update-types:
+          - version-update:semver-major
+          - version-update:semver-minor

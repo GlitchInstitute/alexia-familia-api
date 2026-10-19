@@ -114,7 +114,15 @@ To keep the file elsewhere, set `ALEXIA_API_DENYLIST` to its path. A word of few
 
 ## Update the lock file
 
-pixi pins every package in `pixi.lock`. Dependabot updates the GitHub Actions and the Docker base image, but not this file. To refresh it, run `pixi update`, then `pixi run -e dev check`, and commit `pixi.lock` with the change.
+pixi pins every package in `pixi.lock`. Dependabot updates the GitHub Actions and the digest of the Ubuntu base image, but not this file. To refresh it, run `pixi update`, then `pixi run -e dev check`, and commit `pixi.lock` with the change.
+
+## Move pixi or Ubuntu to a newer version
+
+Dependabot leaves both alone, so a maintainer moves them by hand.
+
+The version of pixi is written in the `Dockerfile`, in `ci.yml`, and in `release.yml`, and a test fails when the three differ. Change all of them in one commit. The `Dockerfile` also pins the image by digest. Pull the new image, read its digest with `docker images --digests ghcr.io/prefix-dev/pixi`, and write it after the version as `FROM ghcr.io/prefix-dev/pixi:X.Y.Z@sha256:DIGEST`. Then run `pixi run -e dev check` and `scripts/smoke_docker.sh` on an image built from the change.
+
+The runtime image stays on an Ubuntu release with long term support. Move to the next one when you have a reason, change the tag and the digest in the `Dockerfile`, and run the same two checks.
 
 ## Open a pull request
 

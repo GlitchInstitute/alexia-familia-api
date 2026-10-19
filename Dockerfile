@@ -4,7 +4,8 @@
 #   docker run --rm -p 127.0.0.1:8000:8000 alexia-familia-api alexia-api demo --host 0.0.0.0
 #
 # The versions of every package come from pixi.lock, so two builds of one commit hold the same
-# packages. Both base images are pinned by digest. Dependabot proposes newer ones.
+# packages. Both base images are pinned by digest. Dependabot proposes a newer digest of the
+# Ubuntu tag, and the pixi version moves by hand, as CONTRIBUTING.md explains.
 
 FROM ghcr.io/prefix-dev/pixi:0.70.2@sha256:c2d3c9b7041293d90039857bb3cff4c0bbe8c78af1d68254b230575154b85f65 AS build
 
