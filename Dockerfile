@@ -6,7 +6,7 @@
 # The versions of every package come from pixi.lock, so two builds of one commit hold the same
 # packages. Both base images are pinned by digest. Dependabot proposes newer ones.
 
-FROM ghcr.io/prefix-dev/pixi:0.70.2@sha256:c2d3c9b7041293d90039857bb3cff4c0bbe8c78af1d68254b230575154b85f65 AS build
+FROM ghcr.io/prefix-dev/pixi:0.82.0@sha256:e6cca082e52de275f4e6fb4e6648522f30e4ed334fed37378cde393e07405200 AS build
 
 WORKDIR /app
 COPY pixi.toml pixi.lock pyproject.toml README.md LICENSE ./
