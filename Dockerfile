@@ -24,7 +24,7 @@ RUN if [ -d .pixi/envs/default/etc/conda/activate.d ]; then \
     fi
 
 
-FROM ubuntu:24.04@sha256:68ee22004a9109b44973313b02ff7b1de250f1de0f5ecb628d73f579aaff33ac AS runtime
+FROM ubuntu:24.04@sha256:fe81560990fae86dc4743202b2cb4d3df98d0bcf949173cecef15ce1127ef852 AS runtime
 
 LABEL org.opencontainers.image.title="alexia-familia-api" \
       org.opencontainers.image.description="A self-hosted REST API for the Alexia Familia parent portal." \
